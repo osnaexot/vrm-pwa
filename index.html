@@ -2,177 +2,211 @@
 <html lang="de">
 <head>
 <meta charset="UTF-8">
-<title>VRM PWA OCR Scanner</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>VRM OCR Scanner</title>
 <style>
-  body { font-family: Arial, sans-serif; padding: 10px; }
-  table { border-collapse: collapse; width: 100%; margin-top: 10px; }
-  th, td { border: 1px solid #ccc; padding: 5px; text-align: left; }
-  .offen { background-color: #ffcccc; }
-  .erfasst { background-color: #ffe4b3; }
-  .ok { background-color: #ccffcc; }
-  .überzählig { background-color: #ccccff; }
+  body { font-family: Arial, sans-serif; background: #f4f4f4; margin: 0; padding: 0; }
+  header { background: #333; color: #fff; padding: 10px; text-align: center; }
+  main { padding: 10px; }
+  table { border-collapse: collapse; width: 100%; margin-top: 10px; background: #fff; }
+  th, td { border: 1px solid #ccc; padding: 5px; text-align: center; }
+  .ok { background: #c8e6c9; }
+  .warn { background: #ffe082; }
+  .status-erfasst { background: #ffecb3; }
+  #feedback.ok { color: green; font-weight: bold; }
+  #feedback.warn { color: orange; font-weight: bold; }
+  #feedback.err { color: red; font-weight: bold; }
   video { width: 100%; max-height: 300px; background: #000; }
 </style>
 </head>
 <body>
 
-<h1>VRM PWA OCR Scanner</h1>
+<header>
+  <h1>VRM OCR Scanner</h1>
+</header>
 
-<input type="file" id="csvFile" accept=".csv">
-<button id="loadCsv">CSV übernehmen</button>
-<br><br>
+<main>
+  <h3>CSV laden</h3>
+  <input type="file" id="csvFile" accept=".csv">
+  <button id="loadCsv">CSV übernehmen</button>
+  <label>Schlüsselspalte:
+    <select id="keyColumn"></select>
+  </label>
 
-<label for="keyColumn">Schlüsselspalte:</label>
-<select id="keyColumn"></select>
+  <h3>Scan-Ergebnis</h3>
+  <div id="feedback"></div>
+  <div>Letzter Scan: <span id="lastScan">-</span></div>
 
-<table id="dataTable">
-<thead></thead>
-<tbody></tbody>
-</table>
+  <h3>Bestellübersicht</h3>
+  <table>
+    <thead>
+      <tr>
+        <th>Schlüssel</th>
+        <th>Artikel</th>
+        <th>Erwartet</th>
+        <th>Erfasst</th>
+        <th>Offen</th>
+        <th>Status</th>
+      </tr>
+    </thead>
+    <tbody id="tbody"></tbody>
+  </table>
 
-<button id="startCamera">Kamera starten</button>
-<button id="stopCamera">Kamera stoppen</button>
-<video id="video" autoplay playsinline></video>
+  <h3>Kamera</h3>
+  <button id="startCam">Kamera starten</button>
+  <button id="stopCam">Kamera stoppen</button>
+  <video id="video" autoplay playsinline></video>
+</main>
 
 <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/tesseract.js@4.1.1/dist/tesseract.min.js"></script>
-
 <script>
-let csvData = [];
-let scannedKeys = {};
+let expect = new Map();
+let scanned = new Map();
+let firstArticle = new Map();
 let selectedKeyColumn = "";
 let videoStream = null;
 
-document.getElementById('loadCsv').addEventListener('click', () => {
-    const fileInput = document.getElementById('csvFile');
-    if (!fileInput.files.length) {
-        alert("Bitte zuerst CSV-Datei auswählen.");
-        return;
-    }
-    Papa.parse(fileInput.files[0], {
-        header: true,
-        complete: function(results) {
-            csvData = results.data;
-            populateKeyColumnSelector();
-            renderTable();
-            console.log("CSV geladen, Zeilen:", csvData.length);
-        }
-    });
-});
+function escapeHtml(t){return t ? t.replace(/[&<>]/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[m])) : "";}
 
-function populateKeyColumnSelector() {
-    const selector = document.getElementById('keyColumn');
-    selector.innerHTML = "";
-    if (csvData.length > 0) {
-        Object.keys(csvData[0]).forEach(col => {
-            let opt = document.createElement('option');
-            opt.value = col;
-            opt.textContent = col;
-            selector.appendChild(opt);
-        });
-        selector.addEventListener('change', () => {
-            selectedKeyColumn = selector.value;
-            renderTable();
-        });
-        selectedKeyColumn = selector.value;
-    }
+function setFeedback(msg,cls){
+  const fb = document.getElementById('feedback');
+  fb.textContent = msg;
+  fb.className = cls;
 }
 
-function renderTable() {
-    const tableHead = document.querySelector('#dataTable thead');
-    const tableBody = document.querySelector('#dataTable tbody');
-    tableHead.innerHTML = "";
-    tableBody.innerHTML = "";
+document.getElementById('loadCsv').onclick = () => {
+  const fileInput = document.getElementById('csvFile');
+  if (!fileInput.files.length) return alert("Bitte CSV-Datei auswählen.");
+  Papa.parse(fileInput.files[0], {
+    header: true,
+    complete: res => {
+      const cols = Object.keys(res.data[0] || {});
+      const sel = document.getElementById('keyColumn');
+      sel.innerHTML = "";
+      cols.forEach(c => {
+        let opt = document.createElement('option');
+        opt.value = c;
+        opt.textContent = c;
+        sel.appendChild(opt);
+      });
+      sel.onchange = () => {
+        selectedKeyColumn = sel.value;
+        buildExpect(res.data);
+      };
+      selectedKeyColumn = sel.value;
+      buildExpect(res.data);
+    }
+  });
+};
 
-    if (!csvData.length) return;
-
-    // Kopfzeile
-    const headerRow = document.createElement('tr');
-    Object.keys(csvData[0]).forEach(col => {
-        let th = document.createElement('th');
-        th.textContent = col;
-        headerRow.appendChild(th);
-    });
-    let statusTh = document.createElement('th');
-    statusTh.textContent = "Status";
-    headerRow.appendChild(statusTh);
-    tableHead.appendChild(headerRow);
-
-    // Datenzeilen
-    csvData.forEach(row => {
-        let tr = document.createElement('tr');
-        Object.values(row).forEach(val => {
-            let td = document.createElement('td');
-            td.textContent = val;
-            tr.appendChild(td);
-        });
-
-        let key = row[selectedKeyColumn];
-        let scannedCount = scannedKeys[key] || 0;
-        let expected = parseInt(row.Bretter || row.Menge || 0);
-
-        let statusTd = document.createElement('td');
-        if (scannedCount === 0) {
-            statusTd.textContent = "offen";
-            tr.className = "offen";
-        } else if (scannedCount < expected) {
-            statusTd.textContent = "erfasst";
-            tr.className = "erfasst";
-        } else if (scannedCount === expected) {
-            statusTd.textContent = "ok";
-            tr.className = "ok";
-        } else {
-            statusTd.textContent = "überzählig";
-            tr.className = "überzählig";
-        }
-        tr.appendChild(statusTd);
-        tableBody.appendChild(tr);
-    });
+function buildExpect(rows){
+  expect.clear(); scanned.clear(); firstArticle.clear();
+  rows.forEach(r => {
+    const key = (r[selectedKeyColumn]||"").trim();
+    if (!key) return;
+    const qty = parseInt(r.Bretter || r.Menge || 0);
+    expect.set(key, qty);
+    firstArticle.set(key, r.Artikelname || "");
+  });
+  renderTable();
 }
 
-document.getElementById('startCamera').addEventListener('click', async () => {
-    try {
-        videoStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
-        document.getElementById('video').srcObject = videoStream;
-        scanLoop();
-    } catch (err) {
-        alert("Kamera konnte nicht gestartet werden: " + err);
-    }
-});
+function renderTable(){
+  const tb = document.getElementById('tbody');
+  tb.innerHTML = '';
+  const keys = Array.from(expect.keys()).sort();
+  for (const k of keys){
+    const exp = expect.get(k) || 0;
+    const done = scanned.get(k) || 0;
+    const open = Math.max(exp - done, 0);
 
-document.getElementById('stopCamera').addEventListener('click', () => {
-    if (videoStream) {
-        videoStream.getTracks().forEach(track => track.stop());
-    }
-});
+    let status = 'offen', cls = '';
+    if (done === 0)            { status = 'offen'; cls = ''; }
+    else if (done < exp)       { status = 'erfasst'; cls = 'status-erfasst'; }
+    else if (done === exp)     { status = 'ok'; cls = 'ok'; }
+    else                       { status = 'überzählig'; cls = 'warn'; }
 
-function scanLoop() {
-    const video = document.getElementById('video');
-    const canvas = document.createElement('canvas');
-    const ctx = canvas.getContext('2d');
-    setInterval(async () => {
-        if (video.readyState === video.HAVE_ENOUGH_DATA) {
-            canvas.width = video.videoWidth;
-            canvas.height = video.videoHeight;
-            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-            const { data: { text } } = await Tesseract.recognize(canvas, 'eng', { tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789' });
-            let match = extractBestCode(text);
-            if (match && csvData.length) {
-                let found = csvData.find(row => String(row[selectedKeyColumn]).trim() === match);
-                if (found) {
-                    scannedKeys[match] = (scannedKeys[match] || 0) + 1;
-                    renderTable();
-                }
-            }
-        }
-    }, 3000);
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>${escapeHtml(k)}</td>
+      <td>${escapeHtml(firstArticle.get(k) || '')}</td>
+      <td class="c">${exp}</td>
+      <td class="c">${done}</td>
+      <td class="c">${open}</td>
+      <td class="c ${cls}">${status}</td>
+    `;
+    tb.appendChild(tr);
+  }
 }
 
-function extractBestCode(text) {
-    let tokens = text.split(/\s+/).map(t => t.replace(/[^A-Z0-9]/g, ''));
-    let candidate = tokens.find(t => t.length >= 4 && t.length <= 12);
-    return candidate || null;
+function checkOCRMatch(text){
+  if (!expect.size) { setFeedback('Bitte zuerst CSV übernehmen.', 'err'); return; }
+
+  const tokens = (text||'')
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g,' ')
+    .split(' ')
+    .filter(t => t.length >= 4 && t.length <= 12);
+
+  const keyMap = new Map();
+  for (const key of expect.keys()) {
+    if (!key) continue;
+    keyMap.set(String(key).toUpperCase(), key);
+  }
+
+  for (const tok of tokens){
+    if (keyMap.has(tok)){
+      const key  = keyMap.get(tok);
+      const done = (scanned.get(key) || 0) + 1;
+      scanned.set(key, done);
+      document.getElementById('lastScan').textContent = key;
+
+      const exp = expect.get(key) || 0;
+      if (done < exp)        setFeedback(`✅ ${key}: erfasst ${done}/${exp}`, 'warn');
+      else if (done === exp) setFeedback(`✅ ${key}: vollständig (${done}/${exp})`, 'ok');
+      else                   setFeedback(`⚠️ ${key}: ÜBERZÄHLIG (${done}/${exp})`, 'warn');
+
+      renderTable();
+      return;
+    }
+  }
+  setFeedback('❌ Kein Schlüssel im OCR-Text gefunden', 'err');
+}
+
+document.getElementById('startCam').onclick = async () => {
+  try {
+    videoStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+    document.getElementById('video').srcObject = videoStream;
+    scanLoop();
+  } catch(e) {
+    setFeedback('Kamera-Fehler: ' + e.message, 'err');
+  }
+};
+
+document.getElementById('stopCam').onclick = () => {
+  if (videoStream) {
+    videoStream.getTracks().forEach(t => t.stop());
+    videoStream = null;
+  }
+};
+
+function scanLoop(){
+  const video = document.getElementById('video');
+  const canvas = document.createElement('canvas');
+  const ctx = canvas.getContext('2d');
+  setInterval(async () => {
+    if (!videoStream) return;
+    if (video.readyState === video.HAVE_ENOUGH_DATA) {
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      const { data: { text } } = await Tesseract.recognize(canvas, 'eng', {
+        tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
+      });
+      if (text.trim()) checkOCRMatch(text);
+    }
+  }, 3000);
 }
 </script>
 

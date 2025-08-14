@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>VRM Wareneingang – Kamera-OCR</title>
   <meta name="theme-color" content="#0b1220" />
-  <link rel="manifest" href="manifest.json?v=7" />
+  <link rel="manifest" href="manifest.json?v=8" />
   <style>
     :root { --bg:#0b1220; --card:#121a2b; --muted:#9fb0d0; --ok:#23c55e; --warn:#f59e0b; --err:#ef4444; --txt:#e6eefc; }
     *{box-sizing:border-box}
@@ -24,13 +24,19 @@
     td.c{text-align:center}
     #feedback.ok{color:var(--ok)} #feedback.warn{color:var(--warn)} #feedback.err{color:var(--err)}
     .status-erfasst{color:var(--warn);font-weight:600}
-    pre#log{white-space:pre-wrap;background:#0f1729;border:1px solid #1c2740;border-radius:10px;padding:10px;max-height:22vh;overflow:auto}
+
+    /* Visuelles Highlight bei Erfolg */
+    .flash-green { animation: flashGreen 600ms ease-in-out; }
+    @keyframes flashGreen {
+      0% { background-color: rgba(34,197,94,0.35); }
+      100% { background-color: transparent; }
+    }
   </style>
 </head>
 <body>
   <header>
     <h1 style="margin:0;font-size:18px">VRM Wareneingang – Kamera-OCR</h1>
-    <span class="badge">Build v7</span>
+    <span class="badge">Build v8 (manueller Scan)</span>
   </header>
 
   <main>
@@ -39,16 +45,16 @@
       <div class="row">
         <input id="file" type="file" accept=".csv,text/csv" />
         <button id="btnLoad" class="primary">CSV übernehmen</button>
-        <select id="keyCol" disabled></select>
-        <select id="qtyCol" disabled></select>
-        <select id="lang">
+        <select id="keyCol" title="Schlüssel-Spalte" disabled></select>
+        <select id="qtyCol" title="Mengen-Spalte" disabled></select>
+        <select id="lang" title="OCR-Sprache">
           <option value="eng">OCR: Englisch</option>
           <option value="deu">OCR: Deutsch</option>
           <option value="eng+deu" selected>OCR: Englisch+Deutsch</option>
         </select>
         <button id="export" class="primary">Bericht exportieren</button>
       </div>
-      <div class="hint">Beste Ergebnisse mit Schlüssel <b>Wagennummer</b> oder <b>LS</b> vom Aufkleber.</div>
+      <div class="hint">Empfohlen als Schlüssel: <b>Wagennummer</b> (alternativ: <b>LS</b>). Scannen per Button „Jetzt scannen“.</div>
     </section>
 
     <!-- 2) KAMERA & OCR -->
@@ -73,13 +79,13 @@
       <div class="hint" id="ocrStatus">OCR bereit …</div>
     </section>
 
-    <!-- 3) TABELLE -->
+    <!-- 3) TABELLE (unten) -->
     <section class="card">
       <table>
         <thead>
           <tr>
-            <th>Schlüssel</th>
-            <th>Artikel</th>
+            <th>Schlüssel (gewählte Spalte)</th>
+            <th>Artikel (erste Zeile)</th>
             <th class="c">Erwartet</th>
             <th class="c">Gesc.</th>
             <th class="c">Offen</th>
@@ -98,157 +104,276 @@
   </main>
 
 <script>
-const $ = s=>document.querySelector(s);
-const log = (...a)=>{$('#log').textContent += a.join(' ')+'\n'; console.log(...a)};
+// Optionaler Service Worker
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('./service-worker.js?v=8').catch(()=>{});
+}
 
+const $ = sel => document.querySelector(sel);
+const log = (...a)=>{ const el=$('#log'); el.textContent += a.join(' ') + '\n'; console.log(...a); };
+
+/* ====== CSV ====== */
 let headers=[], rows=[];
 let expect=new Map(), scanned=new Map(), firstArticle=new Map();
 let keyName='LS', qtyName='Bretter';
-let videoStream=null, workerReady=false, ocrLang='eng+deu';
 
 $('#btnLoad').addEventListener('click', async () => {
   const file = $('#file').files[0];
-  if (!file) return alert('Bitte CSV auswählen.');
+  if (!file) return alert('Bitte zuerst eine CSV-Datei auswählen.');
   const text = await file.text();
   const delim = detectDelimiter(text);
   const data = parseCSV(text, delim);
-  if (!data.length) return alert('CSV leer.');
+  if (!data.length) { alert('CSV ist leer.'); return; }
   headers = data[0].map(h => h.trim());
   rows = data.slice(1);
-  log('CSV übernommen.');
+  log('CSV übernommen. Spalten:', headers.join(' | '));
 
-  const keySel=$('#keyCol'), qtySel=$('#qtyCol');
+  const keySel = $('#keyCol'), qtySel = $('#qtyCol');
   keySel.innerHTML=''; qtySel.innerHTML='';
-  headers.forEach(h=>{
-    let o1=document.createElement('option'); o1.value=h; o1.textContent=h; keySel.appendChild(o1);
-    let o2=document.createElement('option'); o2.value=h; o2.textContent=h; qtySel.appendChild(o2);
+  headers.forEach(h => {
+    const o1=document.createElement('option'); o1.value=h; o1.textContent=`Schlüssel: ${h}`; keySel.appendChild(o1);
+    const o2=document.createElement('option'); o2.value=h; o2.textContent=`Menge: ${h}`; qtySel.appendChild(o2);
   });
-  keyName = headers.includes('LS') ? 'LS' : headers[0];
-  keySel.value=keyName;
-  qtyName = headers.includes('Bretter') ? 'Bretter' : '<keine>';
-  qtySel.value=qtyName;
+  keyName = headers.includes('Wagennummer') ? 'Wagennummer' : (headers.includes('LS') ? 'LS' : headers[0]);
+  keySel.value = keyName;
+
+  if (headers.includes('Bretter')) {
+    qtyName = 'Bretter'; qtySel.value='Bretter';
+  } else {
+    const opt = document.createElement('option'); opt.value='<keine>'; opt.textContent='Menge: <keine>'; qtySel.prepend(opt); qtySel.value='<keine>';
+    qtyName = '<keine>';
+  }
   keySel.disabled=false; qtySel.disabled=false;
-  applyMapping();
+  applyMapping(); status();
 });
 
-$('#keyCol').addEventListener('change', e=>{keyName=e.target.value;applyMapping()});
-$('#qtyCol').addEventListener('change', e=>{qtyName=e.target.value;applyMapping()});
+$('#keyCol').addEventListener('change', e => { keyName=e.target.value; applyMapping(); status(); });
+$('#qtyCol').addEventListener('change', e => { qtyName=e.target.value; applyMapping(); status(); });
 
 function applyMapping(){
   expect.clear(); scanned.clear(); firstArticle.clear();
-  const kIdx=headers.indexOf(keyName);
-  const qIdx=(qtyName && qtyName!=='<keine>')?headers.indexOf(qtyName):-1;
-  const aIdx=headers.indexOf('Artikelname');
+  const kIdx = headers.indexOf(keyName);
+  const qIdx = (qtyName && qtyName!=='<keine>') ? headers.indexOf(qtyName) : -1;
+  const aIdx = headers.indexOf('Artikelname');
 
-  for (const r of rows){
-    if (kIdx<0) continue;
-    const key=String(r[kIdx]||'').trim();
+  for (const r of rows) {
+    if (kIdx<0 || kIdx>=r.length) continue;
+    const key = String(r[kIdx] ?? '').trim();
     if (!key) continue;
-    let q=1;
-    if (qIdx>=0) q=toInt(r[qIdx],1);
-    expect.set(key,(expect.get(key)||0)+(q>0?q:1));
-    if (!firstArticle.has(key) && aIdx>=0) firstArticle.set(key,String(r[aIdx]||''));
+    let q = 1;
+    if (qIdx>=0 && qIdx<r.length) q = toInt(r[qIdx],1);
+    expect.set(key, (expect.get(key)||0) + (q>0?q:1));
+    if (!firstArticle.has(key) && aIdx>=0 && aIdx<r.length) firstArticle.set(key, String(r[aIdx] ?? ''));
   }
   renderTable();
+  $('#lastScan').textContent='–'; setFeedback('', '');
 }
 
 function renderTable(){
-  const tb=$('#tbody'); tb.innerHTML='';
-  const keys=Array.from(expect.keys()).sort();
+  const tb = document.getElementById('tbody');
+  tb.innerHTML = '';
+  const keys = Array.from(expect.keys()).sort((a,b)=>a.localeCompare(b));
   for (const k of keys){
-    const exp=expect.get(k)||0, done=scanned.get(k)||0, open=Math.max(exp-done,0);
-    let status='offen', cls='';
-    if (done===0) status='offen';
-    else if (done<exp){status='erfasst'; cls='status-erfasst'}
-    else if (done===exp){status='ok'; cls='ok'}
-    else {status='überzählig'; cls='warn'}
-    const tr=document.createElement('tr');
-    tr.innerHTML=`<td>${k}</td><td>${firstArticle.get(k)||''}</td><td class="c">${exp}</td><td class="c">${done}</td><td class="c">${open}</td><td class="c ${cls}">${status}</td>`;
+    const exp = expect.get(k) || 0;
+    const done = scanned.get(k) || 0;
+    const open = Math.max(exp - done, 0);
+
+    let status = 'offen', cls = '';
+    if (done === 0)      { status = 'offen';      cls = ''; }
+    else if (done < exp) { status = 'erfasst';    cls = 'status-erfasst'; }
+    else if (done === exp){ status = 'ok';        cls = 'ok'; }
+    else                 { status = 'überzählig'; cls = 'warn'; }
+
+    const tr = document.createElement('tr');
+    tr.dataset.key = k; // für visuelles Highlight
+    tr.innerHTML = `
+      <td>${escapeHtml(k)}</td>
+      <td>${escapeHtml(firstArticle.get(k) || '')}</td>
+      <td class="c">${exp}</td>
+      <td class="c">${done}</td>
+      <td class="c">${open}</td>
+      <td class="c ${cls}">${status}</td>
+    `;
     tb.appendChild(tr);
   }
 }
 
-$('#export').addEventListener('click', ()=>{
-  if (!expect.size) return alert('Kein Datensatz.');
-  const out=[["Schlüssel","Artikel","Erwartet","Gesc.","Offen","Status"]];
-  const keys=Array.from(expect.keys()).sort();
+document.getElementById('export').addEventListener('click', ()=>{
+  if (!expect.size) return alert('Kein Datensatz geladen.');
+  const out=[["Schlüssel","Artikel (erste Zeile)","Erwartet","Gescant","Offen","Status"]];
+  const keys=Array.from(expect.keys()).sort((a,b)=>a.localeCompare(b));
   for (const k of keys){
     const exp=expect.get(k)||0, done=scanned.get(k)||0, open=Math.max(exp-done,0);
-    let s='offen'; if(done===0)s='offen'; else if(done<exp)s='erfasst'; else if(done===exp)s='ok'; else s='überzählig';
-    out.push([k,firstArticle.get(k)||"",exp,done,open,s]);
+    let s='offen'; if (done===0) s='offen'; else if (done<exp) s='erfasst'; else if (done===exp) s='ok'; else s='überzählig';
+    out.push([k, firstArticle.get(k)||"", exp, done, open, s]);
   }
-  downloadCSV('report.csv', out);
+  const ts=new Date().toISOString().replace(/[:\-]/g,'').slice(0,15);
+  downloadCSV(`wareneingang_report_${ts}.csv`, out);
 });
 
-$('#lang').addEventListener('change', e=>{ocrLang=e.target.value});
+/* ====== OCR / Kamera (manuell) ====== */
+let videoStream=null, workerReady=false;
+let ocrLang='eng+deu';
 
-$('#startCam').addEventListener('click', startCamera);
-$('#stopCam').addEventListener('click', stopCamera);
-$('#scanNow').addEventListener('click', ()=>{ const v=$('#video'); if (v.srcObject) captureAndOCR(v) });
+document.getElementById('lang').addEventListener('change', e => { ocrLang=e.target.value; setFeedback(`OCR-Sprache: ${ocrLang}`, ''); });
+
+document.getElementById('startCam').addEventListener('click', startCamera);
+document.getElementById('stopCam').addEventListener('click', stopCamera);
+document.getElementById('scanNow').addEventListener('click', () => {
+  const video = $('#video');
+  if (video.srcObject) captureAndOCR(video);
+  else setFeedback('Kamera ist nicht aktiv.', 'err');
+});
 
 async function startCamera(){
   try{
-    const v=$('#video');
-    videoStream = await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'}});
-    v.srcObject=videoStream;
+    const video=$('#video');
+    videoStream = await navigator.mediaDevices.getUserMedia({ video:{ facingMode:'environment' } });
+    video.srcObject = videoStream;
     await ensureWorker();
-    log('Kamera gestartet.');
-  }catch(e){ log('Kamera-Fehler:', e.message) }
+    setFeedback('Kamera aktiv. Bereit zum Scannen.', '');
+    log('Kamera gestartet');
+  }catch(e){
+    setFeedback('Kamera-Fehler: '+e.message, 'err');
+    log('Kamera-Fehler:', e.name, e.message);
+  }
 }
 
 function stopCamera(){
   if (videoStream){ for (const t of videoStream.getTracks()) t.stop(); videoStream=null; }
-  log('Kamera gestoppt.');
+  setFeedback('Kamera gestoppt.', '');
 }
 
 async function ensureWorker(){
   if (workerReady) return;
+  $('#ocrStatus').textContent='Lade OCR … (erster Start 10–20s)';
   if (!window.Tesseract){
-    await new Promise((res,rej)=>{
+    await new Promise((resolve,reject)=>{
       const s=document.createElement('script');
       s.src='https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js';
-      s.onload=res; s.onerror=rej;
+      s.onload=resolve; s.onerror=reject;
       document.head.appendChild(s);
     });
   }
-  window._tessWorker=window._tessWorker||await Tesseract.createWorker();
+  window._tessWorker = window._tessWorker || await Tesseract.createWorker();
   await _tessWorker.loadLanguage(ocrLang);
   await _tessWorker.initialize(ocrLang);
   workerReady=true;
+  $('#ocrStatus').textContent='OCR bereit.';
 }
 
 async function captureAndOCR(video){
-  if (!workerReady) return;
-  const c=document.createElement('canvas');
-  const w=video.videoWidth,h=video.videoHeight;
-  if(!w||!h) return;
-  c.width=w; c.height=h;
-  const ctx=c.getContext('2d');
-  ctx.drawImage(video,0,0,w,h);
-  const {data:{text}}=await _tessWorker.recognize(c);
-  checkOCRMatch(text.trim());
+  if (!workerReady || !_tessWorker) return;
+  const canvas=document.createElement('canvas');
+  const w=video.videoWidth, h=video.videoHeight;
+  if (!w || !h) return;
+  canvas.width=w; canvas.height=h;
+  const ctx=canvas.getContext('2d');
+  const cw=Math.floor(w*0.9), ch=Math.floor(h*0.6);
+  const sx=Math.floor((w-cw)/2), sy=Math.floor((h-ch)/2);
+  ctx.drawImage(video, sx, sy, cw, ch, 0, 0, cw, ch);
+  $('#ocrStatus').textContent='Erkenne Text …';
+  const { data:{ text } } = await _tessWorker.recognize(canvas);
+  const clean=text.trim().replace(/\s+/g,' ');
+  $('#ocrStatus').textContent='Gefundener Text: '+clean;
+  checkOCRMatch(clean);
 }
 
+// Token-Match: A–Z/0–9, 4–12 Zeichen
 function checkOCRMatch(text){
-  const tokens=(text||'').toUpperCase().replace(/[^A-Z0-9]+/g,' ').split(' ').filter(t=>t.length>=4 && t.length<=12);
-  const keyMap=new Map(); for(const key of expect.keys()) keyMap.set(String(key).toUpperCase(), key);
+  if (!expect.size) { setFeedback('Bitte zuerst CSV übernehmen.', 'err'); return; }
+  const tokens = (text||'').toUpperCase().replace(/[^A-Z0-9]+/g,' ').split(' ').filter(t=>t.length>=4 && t.length<=12);
+  const keyMap = new Map(); for (const key of expect.keys()) { if (!key) continue; keyMap.set(String(key).toUpperCase(), key); }
 
   for (const tok of tokens){
     if (keyMap.has(tok)){
-      const key=keyMap.get(tok);
-      scanned.set(key,(scanned.get(key)||0)+1);
-      $('#lastScan').textContent=key;
-      renderTable();
+      const key = keyMap.get(tok);
+      const prev = scanned.get(key) || 0;
+      const done = prev + 1;
+      scanned.set(key, done);
+      document.getElementById('lastScan').textContent = key;
+
+      const exp = expect.get(key) || 0;
+      if (done < exp) { setFeedback(`✅ ${key}: erfasst ${done}/${exp}`, 'warn'); beep(880, 90); flashRow(key); }
+      else if (done === exp) { setFeedback(`✅ ${key}: vollständig (${done}/${exp})`, 'ok'); beep(1200, 120); flashRow(key); }
+      else { setFeedback(`⚠️ ${key}: ÜBERZÄHLIG (${done}/${exp})`, 'warn'); beep(600, 150); flashRow(key); }
+
+      renderTable(); status();
+      // optional Vibrationsfeedback
+      if (navigator.vibrate) { navigator.vibrate(80); }
       return;
     }
   }
+  setFeedback('❌ Kein Schlüssel im OCR-Text gefunden', 'err');
+  beep(300, 140);
 }
 
-/* Utils */
-function detectDelimiter(text){const counts={',':0,';':0,'\t':0,'|':0};let inQ=false;for(let ch of text.split('').slice(0,2000)){if(ch==='"')inQ=!inQ;else if(!inQ&&counts.hasOwnProperty(ch))counts[ch]++}return Object.entries(counts).sort((a,b)=>b[1]-a[1])[0][0]}
-function parseCSV(t,d){const r=[];let f='',row=[],q=false;for(let i=0;i<t.length;i++){const c=t[i];if(q){if(c==='"'){if(t[i+1]==='"'){f+='"';i++;continue}q=false}else f+=c}else{if(c==='"'){q=true}else if(c===d){row.push(f);f=''}else if(c==='\n'){row.push(f);r.push(row);f='';row=[]}else if(c!=='\r'){f+=c}}}row.push(f);r.push(row);return r}
-function toInt(v,d=0){const n=parseFloat(String(v).replace(',','.'));return isNaN(n)?d:Math.round(n)}
-function downloadCSV(name,rows){const csv=rows.map(r=>r.join(';')).join('\n');const blob=new Blob([csv],{type:'text/csv'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=name;a.click()}
+// Visuelles Highlight der passenden Tabellenzeile
+function flashRow(key){
+  const row = [...document.querySelectorAll('#tbody tr')].find(tr => tr.dataset.key === key);
+  if (!row) return;
+  row.classList.remove('flash-green'); // reset falls noch drin
+  void row.offsetWidth;                // Reflow, um Animation neu zu starten
+  row.classList.add('flash-green');
+}
+
+/* ====== Status & Feedback ====== */
+function status(){
+  const totalExp=[...expect.values()].reduce((a,b)=>a+b,0);
+  const totalDone=[...scanned.values()].reduce((a,b)=>a+b,0);
+  const totalOpen=Math.max(totalExp-totalDone,0);
+  $('#statusbar').textContent=`Gesamt: erwartet ${totalExp} • gescannt ${totalDone} • offen ${totalOpen}`;
+}
+function setFeedback(text, type){
+  const f=$('#feedback'); f.textContent=text; f.className=type||'';
+}
+
+/* ====== Audio-Beep ====== */
+let audioCtx;
+function beep(freq=440, dur=100){
+  if (!$('#beep').checked) return;
+  try{
+    audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+    const o = audioCtx.createOscillator();
+    const g = audioCtx.createGain();
+    o.connect(g); g.connect(audioCtx.destination);
+    o.frequency.value = freq; o.type = 'sine';
+    const now = audioCtx.currentTime;
+    g.gain.setValueAtTime(0.0001, now);
+    g.gain.exponentialRampToValueAtTime(0.15, now + 0.02);
+    o.start();
+    g.gain.exponentialRampToValueAtTime(0.0001, now + dur/1000);
+    o.stop(now + dur/1000 + 0.02);
+  }catch(e){}
+}
+
+/* ====== Utils ====== */
+function detectDelimiter(text){
+  const sample=text.split(/\r?\n/).slice(0,20).join('\n');
+  const counts={',':0,';':0,'\t':0,'|':0}; let inQ=false;
+  for (let i=0;i<sample.length;i++){ const ch=sample[i];
+    if (ch === '"') inQ=!inQ; else if(!inQ && counts.hasOwnProperty(ch)) counts[ch]++; }
+  return Object.entries(counts).sort((a,b)=>b[1]-a[1])[0][0];
+}
+function parseCSV(text,delim){
+  const rows=[]; let i=0,field='',row=[],inQ=false;
+  while(i<text.length){ const ch=text[i];
+    if(inQ){ if(ch=== '"'){ if(text[i+1]==='"'){ field+='"'; i+=2; continue;} inQ=false; i++; continue;} field+=ch; i++; continue; }
+    if(ch=== '"'){ inQ=true; i++; continue; }
+    if(ch=== '\r'){ i++; continue; }
+    if(ch=== '\n'){ row.push(field); rows.push(row); field=''; row=[]; i++; continue; }
+    if(ch===delim){ row.push(field); field=''; i++; continue; }
+    field+=ch; i++;
+  } row.push(field); rows.push(row);
+  if(rows.length && rows[0].length && rows[0][0] && rows[0][0].charCodeAt(0)===0xFEFF){ rows[0][0]=rows[0][0].slice(1); }
+  return rows;
+}
+function toInt(v, def=0){ if(v==null) return def; const s=String(v).trim().replace(/[€\s]/g,'').replace(/\./g,'').replace(/,/g,'.'); const n=parseFloat(s); return Number.isFinite(n)?Math.max(0,Math.round(n)):def; }
+function downloadCSV(filename, rows){
+  const csv=rows.map(r=>r.map(x=>{ const s=String(x??''); return /[;"\n,]/.test(s)?`"${s.replace(/"/g,'""')}"`:s; }).join(';')).join('\n');
+  const blob=new Blob([csv],{type:'text/csv;charset=utf-8;'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=filename; a.click(); URL.revokeObjectURL(a.href);
+}
+function escapeHtml(s){ return String(s).replace(/[&<>"']/g, m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m])); }
 </script>
 </body>
 </html>

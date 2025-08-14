@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no" />
   <title>VRM Wareneingang – Kamera-OCR</title>
   <meta name="theme-color" content="#0b1220" />
-  <link rel="manifest" href="manifest.json?v=15" />
+  <link rel="manifest" href="manifest.json?v=16" />
   <style>
     :root{
       --bg:#0b1220; --card:#121a2b; --line:#1c2740; --txt:#e6eefc; --muted:#9fb0d0;
@@ -15,7 +15,6 @@
     html,body{height:100%}
     body{margin:0;background:var(--bg);color:var(--txt);font:14px/1.35 system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial}
 
-    /* Header kompakt, umbruchtauglich */
     header{padding:10px 12px;border-bottom:1px solid var(--line);display:flex;gap:8px;align-items:center;flex-wrap:wrap}
     header h1{margin:0;font-size:16px;flex:1 1 auto}
     .badge{font-size:11px;padding:3px 8px;border-radius:999px;background:#0f1729;border:1px solid var(--line);color:var(--muted)}
@@ -23,7 +22,7 @@
     main{padding:10px;display:grid;gap:10px;max-width:900px;margin:0 auto}
     .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:10px}
 
-    /* --- Controls: 2-Spalten-Grid (kompakt), nie breiter als Screen --- */
+    /* Controls kompakt: 2 Spalten mobil, 4 ab 720px */
     .controls{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
     @media (min-width:720px){ .controls{grid-template-columns:repeat(4,minmax(0,1fr));} }
 
@@ -35,45 +34,32 @@
     .primary{background:linear-gradient(180deg,#2563eb,#1d4ed8);border:none}
     .hint{color:var(--muted);font-size:12px;margin-top:6px}
 
-    /* Dateifeld: Dateiname ellipsen, nie breiter ziehen */
-    input[type="file"]{padding:6px 8px;font-size:12px}
-    input[type="file"]::-webkit-file-upload-button{padding:6px 8px;font-size:12px}
-
-    /* Video passt immer in Breite, nie horizontal scrollen */
     video{width:100%;max-height:40vh;border-radius:10px;border:1px solid var(--line);background:#0f1729}
 
-    /* Feedbackfarben */
     #feedback.ok{color:var(--ok);font-weight:600}
     #feedback.warn{color:var(--warn);font-weight:600}
     #feedback.err{color:var(--err);font-weight:600}
     .status-erfasst{color:var(--warn);font-weight:600}
 
-    /* Nur bei Treffer kurz grünes Aufblinken */
     .flash-green{animation:flashGreen 600ms ease-in-out}
     @keyframes flashGreen{0%{background:rgba(34,197,94,.35)}100%{background:transparent}}
 
-    /* Konsole wrapt, eigener Scroll */
     pre#log{white-space:pre-wrap;word-wrap:break-word;overflow:auto;max-width:100%;
       background:#0f1729;border:1px solid var(--line);border-radius:10px;padding:10px;max-height:26vh}
 
-    /* ---------- Tabelle: Desktop normal, Mobil als Karten (kein Horizontal-Scroll) ---------- */
+    /* Liste/Tabelle mobil als Karten (kein horizontales Scrollen) */
     table{width:100%;border-collapse:collapse}
     th,td{border-bottom:1px solid var(--line);padding:8px 6px;text-align:left;vertical-align:top}
-    th{background:#0f1729;position:sticky;top:0;z-index:1}
+    th{background:#0f1729}
     td.c{text-align:center}
-
-    /* Mobil: collapse in Karten */
     @media (max-width:640px){
       table, thead, tbody, th, td, tr{display:block;width:100%}
       thead{display:none}
       tbody tr{border:1px solid var(--line);border-radius:10px;margin-bottom:8px;overflow:hidden}
-      /* Zeile 1: Schlüssel + Status nebeneinander */
       td[data-l="key"], td[data-l="status"]{display:inline-block;width:50%;box-sizing:border-box;padding-bottom:6px}
       td[data-l="key"]{font-weight:700}
       td[data-l="status"]{text-align:right}
-      /* Zeile 2: Artikel */
       td[data-l="art"]{display:block;width:100%;padding-top:0}
-      /* Zeile 3: Zähler nebeneinander */
       .nums{display:flex;gap:6px;margin-top:6px}
       .nums>div{flex:1;border:1px dashed var(--line);border-radius:8px;padding:6px;text-align:center}
       .nums .label{display:block;color:var(--muted);font-size:12px;margin-bottom:2px}
@@ -83,7 +69,7 @@
 <body>
   <header>
     <h1>VRM Wareneingang – Kamera-OCR</h1>
-    <span class="badge">Build v15 (kompakt, kein Horizontal-Scroll)</span>
+    <span class="badge">Build v16 (stabile Kamera & CSV, kompakt)</span>
   </header>
 
   <main>
@@ -102,6 +88,7 @@
         <button id="export">Report</button>
       </div>
       <div class="hint">Empfohlener Schlüssel: <b>Wagennummer</b> (alternativ <b>LS</b>). Scannen per „Scannen“.</div>
+      <div class="hint" id="csvInfo"></div>
     </section>
 
     <!-- 2) Kamera & OCR -->
@@ -121,7 +108,7 @@
       </div>
 
       <video id="video" autoplay playsinline></video>
-      <div class="hint" id="ocrStatus">OCR bereit …</div>
+      <div class="hint" id="ocrStatus">OCR wird bei Bedarf im Hintergrund geladen …</div>
     </section>
 
     <!-- 3) Liste/Tabelle -->
@@ -149,7 +136,7 @@
   </main>
 
 <script>
-if ('serviceWorker' in navigator){ navigator.serviceWorker.register('./service-worker.js?v=15').catch(()=>{}); }
+if ('serviceWorker' in navigator){ navigator.serviceWorker.register('./service-worker.js?v=16').catch(()=>{}); }
 const $=s=>document.querySelector(s); const log=(...a)=>{ $('#log').textContent+=a.join(' ')+'\\n'; console.log(...a); };
 
 /* ===== CSV ===== */
@@ -161,7 +148,11 @@ $('#btnLoad').addEventListener('click', async ()=>{
   const t=await f.text(); const d=detectDelimiter(t); const data=parseCSV(t,d);
   if(!data.length) return alert('CSV leer.');
   headers=data[0].map(h=>h.trim()); rows=data.slice(1);
-  // Dropdowns füllen
+  $('#csvInfo').textContent=`Trennzeichen: "${d}" • Spalten: ${headers.length} • Zeilen: ${rows.length}`;
+  log('CSV übernommen. Spalten:', headers.join(' | '));
+  log(`Zeilen gesamt: ${rows.length}, Trennzeichen: "${d}"`);
+
+  // Dropdowns
   const keySel=$('#keyCol'), qtySel=$('#qtyCol'); keySel.innerHTML=''; qtySel.innerHTML='';
   headers.forEach(h=>{
     const o1=document.createElement('option');o1.value=h;o1.textContent=h;keySel.appendChild(o1);
@@ -170,6 +161,7 @@ $('#btnLoad').addEventListener('click', async ()=>{
   keyName=headers.includes('Wagennummer')?'Wagennummer':(headers.includes('LS')?'LS':headers[0]); keySel.value=keyName; keySel.disabled=false;
   if(headers.includes('Bretter')){ qtyName='Bretter'; qtySel.value='Bretter'; } else { const o=document.createElement('option');o.value='<keine>';o.textContent='<keine>';qtySel.prepend(o);qtySel.value='<keine>'; qtyName='<keine>'; }
   qtySel.disabled=false;
+
   applyMapping(); status();
 });
 $('#keyCol').addEventListener('change',e=>{ keyName=e.target.value; applyMapping(); status(); });
@@ -180,17 +172,21 @@ function applyMapping(){
   const kIdx=headers.indexOf(keyName);
   const qIdx=(qtyName && qtyName!=='<keine>')?headers.indexOf(qtyName):-1;
   const aIdx=headers.indexOf('Artikelname');
+  let rowsCount=0;
   for(const r of rows){
+    if(!r || !r.length) continue;
+    rowsCount++;
     if(kIdx<0||kIdx>=r.length) continue;
     const key=String(r[kIdx]??'').trim(); if(!key) continue;
     let q=1; if(qIdx>=0&&qIdx<r.length) q=toInt(r[qIdx],1);
     expect.set(key,(expect.get(key)||0)+(q>0?q:1));
     if(!firstArticle.has(key)&&aIdx>=0&&aIdx<r.length) firstArticle.set(key,String(r[aIdx]??''));
   }
+  log(`applyMapping: verarbeitete Zeilen: ${rowsCount}, eindeutige Schlüssel: ${expect.size}`);
   renderTable(); $('#lastScan').textContent='–'; setFeedback('', '');
 }
 
-/* ===== Tabelle rendern (Desktop=normal, Mobil=Karten) ===== */
+/* ===== Tabelle (mobil als Karten) ===== */
 function renderTable(){
   const tb=$('#tbody'); tb.innerHTML='';
   const keys=[...expect.keys()].sort((a,b)=>a.localeCompare(b));
@@ -234,47 +230,67 @@ $('#export').addEventListener('click', ()=>{
   downloadCSV(`wareneingang_report_${ts}.csv`,out);
 });
 
-/* ===== Kamera & OCR (manuell) ===== */
+/* ===== Kamera & OCR ===== */
 let videoStream=null, workerReady=false, ocrLang='eng+deu';
 
 $('#lang').addEventListener('change',e=>{ ocrLang=e.target.value; setFeedback(`OCR: ${ocrLang}`,''); });
-$('#startCam').addEventListener('click', startCamera);
-$('#stopCam').addEventListener('click', stopCamera);
-$('#scanNow').addEventListener('click', ()=>{ const v=$('#video'); if(v.srcObject) captureAndOCR(v); else setFeedback('Kamera nicht aktiv.','err'); });
 
-async function startCamera(){
+$('#startCam').addEventListener('click', async ()=>{
   try{
     const v=$('#video');
+    // Kamera SOFORT starten
     videoStream=await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'}});
     v.srcObject=videoStream;
-    await ensureWorker();
-    setFeedback('Kamera aktiv.',''); log('Kamera gestartet');
-  }catch(e){ setFeedback('Kamera-Fehler: '+e.message,'err'); }
-}
-function stopCamera(){ if(videoStream){ for(const t of videoStream.getTracks()) t.stop(); videoStream=null; } setFeedback('Kamera gestoppt.',''); }
+    setFeedback('Kamera aktiv.',''); log('Kamera gestartet.');
+    // OCR im Hintergrund laden (blockiert Kamera NICHT)
+    ensureWorker().catch(err=>{ log('OCR-Ladefehler:', err.message||err); $('#ocrStatus').textContent='OCR konnte nicht geladen werden. Scannen nur mit Kamera-Start möglich.'; });
+  }catch(e){
+    setFeedback('Kamera-Fehler: '+e.message,'err'); log('Kamera-Fehler:', e.name, e.message);
+  }
+});
+
+$('#stopCam').addEventListener('click', ()=>{
+  if(videoStream){ for(const t of videoStream.getTracks()) t.stop(); videoStream=null; }
+  setFeedback('Kamera gestoppt.',''); log('Kamera gestoppt.');
+});
+
+$('#scanNow').addEventListener('click', ()=>{
+  const v=$('#video'); if(v.srcObject) captureAndOCR(v); else setFeedback('Kamera nicht aktiv.','err');
+});
 
 async function ensureWorker(){
   if(workerReady) return;
-  $('#ocrStatus').textContent='Lade OCR …';
+  $('#ocrStatus').textContent='OCR wird geladen … (einmalig 10–20s)';
   if(!window.Tesseract){
-    await new Promise((res,rej)=>{ const s=document.createElement('script'); s.src='https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js'; s.onload=res; s.onerror=rej; document.head.appendChild(s); });
+    await new Promise((resolve, reject)=>{
+      const s=document.createElement('script');
+      s.src='https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js';
+      s.onload=resolve; s.onerror=reject;
+      document.head.appendChild(s);
+    });
   }
   window._tessWorker=window._tessWorker||await Tesseract.createWorker();
-  await _tessWorker.loadLanguage(ocrLang); await _tessWorker.initialize(ocrLang);
-  workerReady=true; $('#ocrStatus').textContent='OCR bereit.';
+  await _tessWorker.loadLanguage(ocrLang);
+  await _tessWorker.initialize(ocrLang);
+  workerReady=true;
+  $('#ocrStatus').textContent='OCR bereit.';
 }
 
 async function captureAndOCR(video){
-  if(!workerReady||!_tessWorker) return;
-  const c=document.createElement('canvas'), w=video.videoWidth, h=video.videoHeight; if(!w||!h) return;
-  c.width=w; c.height=h; const ctx=c.getContext('2d');
-  const cw=Math.floor(w*0.9), ch=Math.floor(h*0.6), sx=Math.floor((w-cw)/2), sy=Math.floor((h-ch)/2);
-  ctx.drawImage(video,sx,sy,cw,ch,0,0,cw,ch);
-  $('#ocrStatus').textContent='Erkenne Text …';
-  const {data:{text}}=await _tessWorker.recognize(c);
-  const clean=text.trim().replace(/\s+/g,' ');
-  $('#ocrStatus').textContent='Gefundener Text: '+clean;
-  checkOCRMatch(clean);
+  try{
+    if(!workerReady || !_tessWorker){ setFeedback('OCR noch nicht bereit.','warn'); return; }
+    const c=document.createElement('canvas'), w=video.videoWidth, h=video.videoHeight; if(!w||!h){ setFeedback('Kamerabild noch nicht bereit.','warn'); return; }
+    c.width=w; c.height=h; const ctx=c.getContext('2d');
+    const cw=Math.floor(w*0.9), ch=Math.floor(h*0.6), sx=Math.floor((w-cw)/2), sy=Math.floor((h-ch)/2);
+    ctx.drawImage(video,sx,sy,cw,ch,0,0,cw,ch);
+    $('#ocrStatus').textContent='Erkenne Text …';
+    const {data:{text}}=await _tessWorker.recognize(c);
+    const clean=text.trim().replace(/\s+/g,' ');
+    $('#ocrStatus').textContent='Gefundener Text: '+clean;
+    checkOCRMatch(clean);
+  }catch(e){
+    setFeedback('OCR-Fehler: '+(e.message||e),'err'); log('OCR-Fehler:', e);
+  }
 }
 
 /* ===== Matching & Feedback ===== */

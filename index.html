@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>VRM Wareneingang – Kamera-OCR</title>
   <meta name="theme-color" content="#0b1220" />
-  <link rel="manifest" href="manifest.json?v=8" />
+  <link rel="manifest" href="manifest.json?v=9" />
   <style>
     :root { --bg:#0b1220; --card:#121a2b; --muted:#9fb0d0; --ok:#23c55e; --warn:#f59e0b; --err:#ef4444; --txt:#e6eefc; }
     *{box-sizing:border-box}
@@ -19,24 +19,26 @@
     button{cursor:pointer} .primary{background:linear-gradient(180deg,#2563eb,#1d4ed8);border:none}
     .hint{color:var(--muted);font-size:12px;margin-top:6px}
     video{width:100%;max-height:48vh;border-radius:12px;border:1px solid #1c2740;background:#0f1729}
-    table{width:100%;border-collapse:collapse} th,td{border-bottom:1px solid #1c2740;padding:8px;text-align:left}
+    /* Tabelle */
+    table{width:100%;border-collapse:collapse;min-width:800px}
+    th,td{border-bottom:1px solid #1c2740;padding:8px;text-align:left;white-space:nowrap}
     th{background:#0f1729;position:sticky;top:0;z-index:1}
     td.c{text-align:center}
     #feedback.ok{color:var(--ok)} #feedback.warn{color:var(--warn)} #feedback.err{color:var(--err)}
     .status-erfasst{color:var(--warn);font-weight:600}
-
+    /* Nur der Tabellenbereich kann horizontal scrollen */
+    .table-scroll{overflow-x:auto;border:1px solid #1c2740;border-radius:10px}
     /* Visuelles Highlight bei Erfolg */
     .flash-green { animation: flashGreen 600ms ease-in-out; }
-    @keyframes flashGreen {
-      0% { background-color: rgba(34,197,94,0.35); }
-      100% { background-color: transparent; }
-    }
+    @keyframes flashGreen { 0% { background-color: rgba(34,197,94,0.35); } 100% { background-color: transparent; } }
+    /* Kleine Bildschirme: Bedienelemente nicht umbrechen */
+    .row > * { white-space: nowrap; }
   </style>
 </head>
 <body>
   <header>
     <h1 style="margin:0;font-size:18px">VRM Wareneingang – Kamera-OCR</h1>
-    <span class="badge">Build v8 (manueller Scan)</span>
+    <span class="badge">Build v9 (manueller Scan + Scroll-Tabelle)</span>
   </header>
 
   <main>
@@ -79,21 +81,23 @@
       <div class="hint" id="ocrStatus">OCR bereit …</div>
     </section>
 
-    <!-- 3) TABELLE (unten) -->
+    <!-- 3) TABELLE (unten, horizontal scrollbar) -->
     <section class="card">
-      <table>
-        <thead>
-          <tr>
-            <th>Schlüssel (gewählte Spalte)</th>
-            <th>Artikel (erste Zeile)</th>
-            <th class="c">Erwartet</th>
-            <th class="c">Gesc.</th>
-            <th class="c">Offen</th>
-            <th class="c">Status</th>
-          </tr>
-        </thead>
-        <tbody id="tbody"></tbody>
-      </table>
+      <div class="table-scroll">
+        <table>
+          <thead>
+            <tr>
+              <th>Schlüssel (gewählte Spalte)</th>
+              <th>Artikel (erste Zeile)</th>
+              <th class="c">Erwartet</th>
+              <th class="c">Gesc.</th>
+              <th class="c">Offen</th>
+              <th class="c">Status</th>
+            </tr>
+          </thead>
+          <tbody id="tbody"></tbody>
+        </table>
+      </div>
     </section>
 
     <!-- 4) LOG -->
@@ -106,7 +110,7 @@
 <script>
 // Optionaler Service Worker
 if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.register('./service-worker.js?v=8').catch(()=>{});
+  navigator.serviceWorker.register('./service-worker.js?v=9').catch(()=>{});
 }
 
 const $ = sel => document.querySelector(sel);
@@ -299,7 +303,6 @@ function checkOCRMatch(text){
       else { setFeedback(`⚠️ ${key}: ÜBERZÄHLIG (${done}/${exp})`, 'warn'); beep(600, 150); flashRow(key); }
 
       renderTable(); status();
-      // optional Vibrationsfeedback
       if (navigator.vibrate) { navigator.vibrate(80); }
       return;
     }
@@ -312,8 +315,8 @@ function checkOCRMatch(text){
 function flashRow(key){
   const row = [...document.querySelectorAll('#tbody tr')].find(tr => tr.dataset.key === key);
   if (!row) return;
-  row.classList.remove('flash-green'); // reset falls noch drin
-  void row.offsetWidth;                // Reflow, um Animation neu zu starten
+  row.classList.remove('flash-green'); // reset, damit Animation neu startet
+  void row.offsetWidth;                // Reflow
   row.classList.add('flash-green');
 }
 

@@ -1,333 +1,180 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="de">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>VRM Wareneingang – Kamera-OCR</title>
-  <meta name="theme-color" content="#0b1220" />
-  <link rel="manifest" href="manifest.json?v=4" />
-  <style>
-    :root { --bg:#0b1220; --card:#121a2b; --muted:#9fb0d0; --ok:#23c55e; --warn:#f59e0b; --err:#ef4444; --txt:#e6eefc; }
-    *{box-sizing:border-box}
-    body{margin:0;background:var(--bg);color:var(--txt);font:14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial}
-    header{padding:14px 16px;border-bottom:1px solid #1c2740;display:flex;justify-content:space-between;align-items:center}
-    .badge{font-size:12px;padding:4px 8px;border-radius:999px;background:#0f1729;border:1px solid #1c2740;color:var(--muted)}
-    main{padding:16px;max-width:1200px;margin:0 auto;display:grid;gap:16px}
-    .card{background:#121a2b;border:1px solid #1c2740;border-radius:14px;padding:14px}
-    .row{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
-    input[type="file"],select,button,input[type="number"]{background:#0f1729;color:var(--txt);border:1px solid #1c2740;border-radius:10px;padding:10px 12px}
-    button{cursor:pointer} .primary{background:linear-gradient(180deg,#2563eb,#1d4ed8);border:none}
-    .hint{color:var(--muted);font-size:12px;margin-top:6px}
-    video{width:100%;max-height:48vh;border-radius:12px;border:1px solid #1c2740;background:#0f1729}
-    table{width:100%;border-collapse:collapse} th,td{border-bottom:1px solid #1c2740;padding:8px;text-align:left}
-    th{background:#0f1729;position:sticky;top:0;z-index:1}
-    td.c{text-align:center}
-    #feedback.ok{color:var(--ok)} #feedback.warn{color:var(--warn)} #feedback.err{color:var(--err)}
-    pre#log{white-space:pre-wrap;background:#0f1729;border:1px solid #1c2740;border-radius:10px;padding:10px;max-height:22vh;overflow:auto}
-  </style>
+<meta charset="UTF-8">
+<title>VRM PWA OCR Scanner</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<style>
+  body { font-family: Arial, sans-serif; padding: 10px; }
+  table { border-collapse: collapse; width: 100%; margin-top: 10px; }
+  th, td { border: 1px solid #ccc; padding: 5px; text-align: left; }
+  .offen { background-color: #ffcccc; }
+  .erfasst { background-color: #ffe4b3; }
+  .ok { background-color: #ccffcc; }
+  .überzählig { background-color: #ccccff; }
+  video { width: 100%; max-height: 300px; background: #000; }
+</style>
 </head>
 <body>
-  <header>
-    <h1 style="margin:0;font-size:18px">VRM Wareneingang – Kamera-OCR</h1>
-    <span class="badge">Build v4</span>
-  </header>
 
-  <main>
-    <!-- CSV LADEN -->
-    <section class="card">
-      <div class="row">
-        <input id="file" type="file" accept=".csv,text/csv" />
-        <button id="btnLoad" class="primary">CSV übernehmen</button>
-        <select id="keyCol" title="Schlüssel-Spalte" disabled></select>
-        <select id="qtyCol" title="Mengen-Spalte" disabled></select>
-        <select id="lang" title="OCR-Sprache">
-          <option value="eng">OCR: Englisch</option>
-          <option value="deu">OCR: Deutsch</option>
-          <option value="eng+deu" selected>OCR: Englisch+Deutsch</option>
-        </select>
-        <button id="export" class="primary">Bericht exportieren</button>
-      </div>
-      <div class="hint">Ablauf: CSV wählen → <b>CSV übernehmen</b> → Schlüssel-/Menge wählen → Kamera starten.</div>
-      <div class="hint">Tipp: Testdatei <code>test.csv</code> verwenden:
-        <code>LS,Artikelname,Bretter / H1CREF,PLATYCODON,5 / VQJ6CE,LAVANDULA,3</code>
-      </div>
-    </section>
+<h1>VRM PWA OCR Scanner</h1>
 
-    <!-- KAMERA / OCR -->
-    <section class="card">
-      <div class="row">
-        <button id="startCam" class="primary">Kamera starten</button>
-        <button id="stopCam">Kamera stoppen</button>
-        <label class="hint" style="margin-left:10px">Intervall (Sek.):</label>
-        <input id="interval" type="number" min="1" value="3" style="width:80px" />
-        <label style="margin-left:10px"><input type="checkbox" id="beep" checked> Beep</label>
-      </div>
+<input type="file" id="csvFile" accept=".csv">
+<button id="loadCsv">CSV übernehmen</button>
+<br><br>
 
-      <div style="margin-top:10px" class="row">
-        <div style="flex:1">
-          <div class="hint">Letzter Scan:</div>
-          <div id="lastScan" style="font-weight:700;font-size:16px">–</div>
-          <div id="feedback"></div>
-          <div id="statusbar" class="hint">Bereit.</div>
-        </div>
-      </div>
+<label for="keyColumn">Schlüsselspalte:</label>
+<select id="keyColumn"></select>
 
-      <video id="video" autoplay playsinline></video>
-      <div class="hint" id="ocrStatus">OCR bereit …</div>
-    </section>
+<table id="dataTable">
+<thead></thead>
+<tbody></tbody>
+</table>
 
-    <!-- TABELLE -->
-    <section class="card">
-      <table>
-        <thead>
-          <tr>
-            <th>Schlüssel (gewählte Spalte)</th>
-            <th>Artikel (erste Zeile)</th>
-            <th class="c">Erwartet</th>
-            <th class="c">Gesc.</th>
-            <th class="c">Offen</th>
-            <th class="c">Status</th>
-          </tr>
-        </thead>
-        <tbody id="tbody"></tbody>
-      </table>
-    </section>
+<button id="startCamera">Kamera starten</button>
+<button id="stopCamera">Kamera stoppen</button>
+<video id="video" autoplay playsinline></video>
 
-    <!-- LOG -->
-    <section class="card">
-      <div class="hint">Konsole</div>
-      <pre id="log"></pre>
-    </section>
-  </main>
+<script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@4.1.1/dist/tesseract.min.js"></script>
 
 <script>
-/* ====== Service Worker registrieren (optional) ====== */
-if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.register('./service-worker.js?v=4').catch(()=>{});
-}
+let csvData = [];
+let scannedKeys = {};
+let selectedKeyColumn = "";
+let videoStream = null;
 
-/* ====== DOM Helpers ====== */
-const $ = sel => document.querySelector(sel);
-const log = (...a)=>{ const el=$('#log'); el.textContent += a.join(' ') + '\n'; console.log(...a); };
-
-/* ====== CSV Handling ====== */
-let headers=[], rows=[];
-let expect=new Map(), scanned=new Map(), firstArticle=new Map();
-let keyName='LS', qtyName='Bretter';
-
-$('#btnLoad').addEventListener('click', async () => {
-  const file = $('#file').files[0];
-  if (!file) return alert('Bitte zuerst eine CSV-Datei auswählen.');
-  const text = await file.text();
-  const delim = detectDelimiter(text);
-  const data = parseCSV(text, delim);
-  if (!data.length) { alert('CSV ist leer.'); return; }
-  headers = data[0].map(h => h.trim());
-  rows = data.slice(1);
-  log('CSV übernommen. Spalten:', headers.join(' | '));
-
-  // Dropdowns füllen
-  const keySel = $('#keyCol'), qtySel = $('#qtyCol');
-  keySel.innerHTML=''; qtySel.innerHTML='';
-  headers.forEach(h => {
-    const o1=document.createElement('option'); o1.value=h; o1.textContent=`Schlüssel: ${h}`; keySel.appendChild(o1);
-    const o2=document.createElement('option'); o2.value=h; o2.textContent=`Menge: ${h}`; qtySel.appendChild(o2);
-  });
-  // Defaults setzen
-  keyName = headers.includes('LS') ? 'LS' : headers[0];
-  keySel.value = keyName;
-  if (headers.includes('Bretter')) {
-    qtyName = 'Bretter'; qtySel.value='Bretter';
-  } else {
-    const opt = document.createElement('option'); opt.value='<keine>'; opt.textContent='Menge: <keine>'; qtySel.prepend(opt); qtySel.value='<keine>';
-    qtyName = '<keine>';
-  }
-  keySel.disabled=false; qtySel.disabled=false;
-
-  // Mapping anwenden
-  applyMapping();
-  status();
-});
-
-$('#keyCol').addEventListener('change', e => { keyName=e.target.value; applyMapping(); status(); });
-$('#qtyCol').addEventListener('change', e => { qtyName=e.target.value; applyMapping(); status(); });
-
-function applyMapping(){
-  expect.clear(); scanned.clear(); firstArticle.clear();
-  const kIdx = headers.indexOf(keyName);
-  const qIdx = (qtyName && qtyName!=='<keine>') ? headers.indexOf(qtyName) : -1;
-  const aIdx = headers.indexOf('Artikelname');
-
-  for (const r of rows) {
-    if (kIdx<0 || kIdx>=r.length) continue;
-    const key = String(r[kIdx] ?? '').trim();
-    if (!key) continue;
-    let q = 1;
-    if (qIdx>=0 && qIdx<r.length) q = toInt(r[qIdx],1);
-    expect.set(key, (expect.get(key)||0) + (q>0?q:1));
-    if (!firstArticle.has(key) && aIdx>=0 && aIdx<r.length) firstArticle.set(key, String(r[aIdx] ?? ''));
-  }
-  renderTable();
-  $('#lastScan').textContent='–'; setFeedback('', '');
-}
-
-function renderTable(){
-  const tb=$('#tbody'); tb.innerHTML='';
-  const keys = Array.from(expect.keys()).sort((a,b)=>a.localeCompare(b));
-  for (const k of keys){
-    const exp=expect.get(k)||0, done=scanned.get(k)||0, open=Math.max(exp-done,0);
-    let status='offen', cls='';
-    if (done===exp){ status='ok'; cls='ok'; }
-    else if (done>exp){ status='überzählig'; cls='warn'; }
-    const tr=document.createElement('tr');
-    tr.innerHTML=`<td>${escapeHtml(k)}</td>
-                  <td>${escapeHtml(firstArticle.get(k)||'')}</td>
-                  <td class="c">${exp}</td>
-                  <td class="c">${done}</td>
-                  <td class="c">${open}</td>
-                  <td class="c ${cls}">${status}</td>`;
-    tb.appendChild(tr);
-  }
-}
-
-$('#export').addEventListener('click', ()=>{
-  if (!expect.size) return alert('Kein Datensatz geladen.');
-  const out=[["Schlüssel","Artikel (erste Zeile)","Erwartet","Gescant","Offen","Status"]];
-  const keys=Array.from(expect.keys()).sort((a,b)=>a.localeCompare(b));
-  for (const k of keys){
-    const exp=expect.get(k)||0, done=scanned.get(k)||0, open=Math.max(exp-done,0);
-    let s='offen'; if (done===exp) s='ok'; else if (done>exp) s='überzählig';
-    out.push([k, firstArticle.get(k)||"", exp, done, open, s]);
-  }
-  const ts=new Date().toISOString().replace(/[:\-]/g,'').slice(0,15);
-  downloadCSV(`wareneingang_report_${ts}.csv`, out);
-});
-
-/* ====== OCR / Kamera ====== */
-let videoStream=null, scanTimer=null, workerReady=false;
-let ocrLang='eng+deu';
-document.getElementById('lang').addEventListener('change', e => { ocrLang=e.target.value; setFeedback(`OCR-Sprache: ${ocrLang}`, ''); });
-
-document.getElementById('startCam').addEventListener('click', startCamera);
-document.getElementById('stopCam').addEventListener('click', stopCamera);
-
-async function startCamera(){
-  try{
-    const video=$('#video');
-    videoStream = await navigator.mediaDevices.getUserMedia({ video:{ facingMode:'environment' } });
-    video.srcObject = videoStream;
-    await ensureWorker();
-    const sec=Math.max(1, parseInt($('#interval').value||'3',10));
-    if (scanTimer) clearInterval(scanTimer);
-    scanTimer = setInterval(()=>captureAndOCR(video), sec*1000);
-    setFeedback('Kamera aktiv – OCR läuft …', '');
-    log('Kamera gestartet');
-  }catch(e){
-    setFeedback('Kamera-Fehler: '+e.message, 'err');
-    log('Kamera-Fehler:', e.name, e.message);
-  }
-}
-
-function stopCamera(){
-  if (scanTimer){ clearInterval(scanTimer); scanTimer=null; }
-  if (videoStream){ for (const t of videoStream.getTracks()) t.stop(); videoStream=null; }
-  setFeedback('Kamera gestoppt.', '');
-}
-
-async function ensureWorker(){
-  if (workerReady) return;
-  $('#ocrStatus').textContent='Lade OCR … (erster Start 10–20s)';
-  if (!window.Tesseract){
-    await new Promise((resolve,reject)=>{
-      const s=document.createElement('script');
-      s.src='https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js';
-      s.onload=resolve; s.onerror=reject;
-      document.head.appendChild(s);
-    });
-  }
-  window._tessWorker = window._tessWorker || await Tesseract.createWorker();
-  await _tessWorker.loadLanguage(ocrLang);
-  await _tessWorker.initialize(ocrLang);
-  workerReady=true;
-  $('#ocrStatus').textContent='OCR bereit.';
-}
-
-async function captureAndOCR(video){
-  if (!workerReady || !_tessWorker) return;
-  const canvas=document.createElement('canvas');
-  const w=video.videoWidth, h=video.videoHeight;
-  if (!w || !h) return;
-  canvas.width=w; canvas.height=h;
-  const ctx=canvas.getContext('2d');
-  const cw=Math.floor(w*0.9), ch=Math.floor(h*0.6);
-  const sx=Math.floor((w-cw)/2), sy=Math.floor((h-ch)/2);
-  ctx.drawImage(video, sx, sy, cw, ch, 0, 0, cw, ch);
-  $('#ocrStatus').textContent='Erkenne Text …';
-  const { data:{ text } } = await _tessWorker.recognize(canvas);
-  const clean=text.trim().replace(/\s+/g,' ');
-  $('#ocrStatus').textContent='Gefundener Text: '+clean;
-  checkOCRMatch(clean);
-}
-
-function checkOCRMatch(text){
-  if (!expect.size) { setFeedback('Bitte zuerst CSV übernehmen.', 'err'); return; }
-  const up=text.toUpperCase();
-  for (const key of expect.keys()){
-    if (!key) continue;
-    if (up.includes(String(key).toUpperCase())){
-      const done=(scanned.get(key)||0)+1;
-      scanned.set(key, done);
-      $('#lastScan').textContent=key;
-      setFeedback(`✅ Treffer: ${key}`, 'ok');
-      renderTable(); status();
-      return;
+document.getElementById('loadCsv').addEventListener('click', () => {
+    const fileInput = document.getElementById('csvFile');
+    if (!fileInput.files.length) {
+        alert("Bitte zuerst CSV-Datei auswählen.");
+        return;
     }
-  }
-  setFeedback('❌ Kein Schlüssel im OCR-Text gefunden', 'err');
+    Papa.parse(fileInput.files[0], {
+        header: true,
+        complete: function(results) {
+            csvData = results.data;
+            populateKeyColumnSelector();
+            renderTable();
+            console.log("CSV geladen, Zeilen:", csvData.length);
+        }
+    });
+});
+
+function populateKeyColumnSelector() {
+    const selector = document.getElementById('keyColumn');
+    selector.innerHTML = "";
+    if (csvData.length > 0) {
+        Object.keys(csvData[0]).forEach(col => {
+            let opt = document.createElement('option');
+            opt.value = col;
+            opt.textContent = col;
+            selector.appendChild(opt);
+        });
+        selector.addEventListener('change', () => {
+            selectedKeyColumn = selector.value;
+            renderTable();
+        });
+        selectedKeyColumn = selector.value;
+    }
 }
 
-/* ====== Status & Feedback ====== */
-function status(){
-  const totalExp=[...expect.values()].reduce((a,b)=>a+b,0);
-  const totalDone=[...scanned.values()].reduce((a,b)=>a+b,0);
-  const totalOpen=Math.max(totalExp-totalDone,0);
-  $('#statusbar').textContent=`Gesamt: erwartet ${totalExp} • gescannt ${totalDone} • offen ${totalOpen}`;
-}
-function setFeedback(text, type){
-  const f=$('#feedback'); f.textContent=text; f.className=type||'';
-  if (text && $('#beep').checked){
-    if (type==='ok') beep(880,80); else if (type==='warn') beep(440,120); else if (type==='err') beep(220,150);
-  }
+function renderTable() {
+    const tableHead = document.querySelector('#dataTable thead');
+    const tableBody = document.querySelector('#dataTable tbody');
+    tableHead.innerHTML = "";
+    tableBody.innerHTML = "";
+
+    if (!csvData.length) return;
+
+    // Kopfzeile
+    const headerRow = document.createElement('tr');
+    Object.keys(csvData[0]).forEach(col => {
+        let th = document.createElement('th');
+        th.textContent = col;
+        headerRow.appendChild(th);
+    });
+    let statusTh = document.createElement('th');
+    statusTh.textContent = "Status";
+    headerRow.appendChild(statusTh);
+    tableHead.appendChild(headerRow);
+
+    // Datenzeilen
+    csvData.forEach(row => {
+        let tr = document.createElement('tr');
+        Object.values(row).forEach(val => {
+            let td = document.createElement('td');
+            td.textContent = val;
+            tr.appendChild(td);
+        });
+
+        let key = row[selectedKeyColumn];
+        let scannedCount = scannedKeys[key] || 0;
+        let expected = parseInt(row.Bretter || row.Menge || 0);
+
+        let statusTd = document.createElement('td');
+        if (scannedCount === 0) {
+            statusTd.textContent = "offen";
+            tr.className = "offen";
+        } else if (scannedCount < expected) {
+            statusTd.textContent = "erfasst";
+            tr.className = "erfasst";
+        } else if (scannedCount === expected) {
+            statusTd.textContent = "ok";
+            tr.className = "ok";
+        } else {
+            statusTd.textContent = "überzählig";
+            tr.className = "überzählig";
+        }
+        tr.appendChild(statusTd);
+        tableBody.appendChild(tr);
+    });
 }
 
-/* ====== Utils ====== */
-function detectDelimiter(text){
-  const sample=text.split(/\r?\n/).slice(0,20).join('\n');
-  const counts={',':0,';':0,'\t':0,'|':0}; let inQ=false;
-  for (let i=0;i<sample.length;i++){ const ch=sample[i];
-    if (ch === '"') inQ=!inQ; else if(!inQ && counts.hasOwnProperty(ch)) counts[ch]++; }
-  return Object.entries(counts).sort((a,b)=>b[1]-a[1])[0][0];
+document.getElementById('startCamera').addEventListener('click', async () => {
+    try {
+        videoStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+        document.getElementById('video').srcObject = videoStream;
+        scanLoop();
+    } catch (err) {
+        alert("Kamera konnte nicht gestartet werden: " + err);
+    }
+});
+
+document.getElementById('stopCamera').addEventListener('click', () => {
+    if (videoStream) {
+        videoStream.getTracks().forEach(track => track.stop());
+    }
+});
+
+function scanLoop() {
+    const video = document.getElementById('video');
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+    setInterval(async () => {
+        if (video.readyState === video.HAVE_ENOUGH_DATA) {
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+            const { data: { text } } = await Tesseract.recognize(canvas, 'eng', { tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789' });
+            let match = extractBestCode(text);
+            if (match && csvData.length) {
+                let found = csvData.find(row => String(row[selectedKeyColumn]).trim() === match);
+                if (found) {
+                    scannedKeys[match] = (scannedKeys[match] || 0) + 1;
+                    renderTable();
+                }
+            }
+        }
+    }, 3000);
 }
-function parseCSV(text,delim){
-  const rows=[]; let i=0,field='',row=[],inQ=false;
-  while(i<text.length){ const ch=text[i];
-    if(inQ){ if(ch=== '"'){ if(text[i+1]==='"'){ field+='"'; i+=2; continue;} inQ=false; i++; continue;} field+=ch; i++; continue; }
-    if(ch=== '"'){ inQ=true; i++; continue; }
-    if(ch=== '\r'){ i++; continue; }
-    if(ch=== '\n'){ row.push(field); rows.push(row); field=''; row=[]; i++; continue; }
-    if(ch===delim){ row.push(field); field=''; i++; continue; }
-    field+=ch; i++;
-  } row.push(field); rows.push(row);
-  if(rows.length && rows[0].length && rows[0][0] && rows[0][0].charCodeAt(0)===0xFEFF){ rows[0][0]=rows[0][0].slice(1); }
-  return rows;
+
+function extractBestCode(text) {
+    let tokens = text.split(/\s+/).map(t => t.replace(/[^A-Z0-9]/g, ''));
+    let candidate = tokens.find(t => t.length >= 4 && t.length <= 12);
+    return candidate || null;
 }
-function toInt(v, def=0){ if(v==null) return def; const s=String(v).trim().replace(/[€\s]/g,'').replace(/\./g,'').replace(/,/g,'.'); const n=parseFloat(s); return Number.isFinite(n)?Math.max(0,Math.round(n)):def; }
-function downloadCSV(filename, rows){
-  const csv=rows.map(r=>r.map(x=>{ const s=String(x??''); return /[;"\n,]/.test(s)?`"${s.replace(/"/g,'""')}"`:s; }).join(';')).join('\n');
-  const blob=new Blob([csv],{type:'text/csv;charset=utf-8;'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=filename; a.click(); URL.revokeObjectURL(a.href);
-}
-let audioCtx; function beep(freq=440, dur=100){ try{ audioCtx=audioCtx||new (window.AudioContext||window.webkitAudioContext)(); const o=audioCtx.createOscillator(); const g=audioCtx.createGain(); o.connect(g); g.connect(audioCtx.destination); o.frequency.value=freq; o.type='sine'; g.gain.setValueAtTime(0.001,audioCtx.currentTime); g.gain.exponentialRampToValueAtTime(0.1,audioCtx.currentTime+0.01); o.start(); setTimeout(()=>{ g.gain.exponentialRampToValueAtTime(0.001,audioCtx.currentTime+0.04); o.stop(audioCtx.currentTime+0.08); }, dur);}catch(e){} }
-function escapeHtml(s){ return String(s).replace(/[&<>"']/g, m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m])); }
 </script>
+
 </body>
 </html>

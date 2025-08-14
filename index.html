@@ -2,43 +2,67 @@
 <html lang="de">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no" />
   <title>VRM Wareneingang – Kamera-OCR</title>
   <meta name="theme-color" content="#0b1220" />
-  <link rel="manifest" href="manifest.json?v=9" />
+  <link rel="manifest" href="manifest.json?v=10" />
   <style>
     :root { --bg:#0b1220; --card:#121a2b; --muted:#9fb0d0; --ok:#23c55e; --warn:#f59e0b; --err:#ef4444; --txt:#e6eefc; }
     *{box-sizing:border-box}
+    html,body{height:100%}
     body{margin:0;background:var(--bg);color:var(--txt);font:14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial}
-    header{padding:14px 16px;border-bottom:1px solid #1c2740;display:flex;justify-content:space-between;align-items:center}
-    .badge{font-size:12px;padding:4px 8px;border-radius:999px;background:#0f1729;border:1px solid #1c2740;color:var(--muted)}
-    main{padding:16px;max-width:1200px;margin:0 auto;display:grid;gap:16px}
-    .card{background:#121a2b;border:1px solid #1c2740;border-radius:14px;padding:14px}
-    .row{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
-    input[type="file"],select,button{background:#0f1729;color:var(--txt);border:1px solid #1c2740;border-radius:10px;padding:10px 12px}
-    button{cursor:pointer} .primary{background:linear-gradient(180deg,#2563eb,#1d4ed8);border:none}
+
+    header{padding:12px 14px;border-bottom:1px solid #1c2740;display:flex;justify-content:space-between;align-items:center}
+    header h1{margin:0;font-size:16px}
+    .badge{font-size:11px;padding:4px 8px;border-radius:999px;background:#0f1729;border:1px solid #1c2740;color:var(--muted)}
+
+    main{padding:10px;display:grid;gap:10px;max-width:800px;margin:0 auto}
+
+    .card{background:#121a2b;border:1px solid #1c2740;border-radius:12px;padding:10px}
+    .row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+    input[type="file"],select,button{background:#0f1729;color:var(--txt);border:1px solid #1c2740;border-radius:10px;padding:8px 10px;font-size:14px}
+    button{cursor:pointer}
+    .primary{background:linear-gradient(180deg,#2563eb,#1d4ed8);border:none}
     .hint{color:var(--muted);font-size:12px;margin-top:6px}
-    video{width:100%;max-height:48vh;border-radius:12px;border:1px solid #1c2740;background:#0f1729}
-    /* Tabelle */
-    table{width:100%;border-collapse:collapse;min-width:800px}
-    th,td{border-bottom:1px solid #1c2740;padding:8px;text-align:left;white-space:nowrap}
+
+    video{width:100%;max-height:40vh;border-radius:10px;border:1px solid #1c2740;background:#0f1729}
+
+    /* Tabelle: immer 100% Breite, keine horizontale Scrollbar */
+    .table-wrap{width:100%}
+    table{width:100%;border-collapse:collapse;table-layout:fixed} /* fixed Layout => feste prozentuale Spalten */
+    th,td{border-bottom:1px solid #1c2740;padding:8px 6px;text-align:left;vertical-align:top;white-space:normal;overflow-wrap:break-word;word-break:break-word}
     th{background:#0f1729;position:sticky;top:0;z-index:1}
-    td.c{text-align:center}
-    #feedback.ok{color:var(--ok)} #feedback.warn{color:var(--warn)} #feedback.err{color:var(--err)}
+
+    /* Feste Spaltenanteile (Summe 100%) */
+    th:nth-child(1), td:nth-child(1){width:26%} /* Schlüssel */
+    th:nth-child(2), td:nth-child(2){width:26%} /* Artikel */
+    th:nth-child(3), td:nth-child(3){width:12%; text-align:center} /* Erwartet */
+    th:nth-child(4), td:nth-child(4){width:12%; text-align:center} /* Gesc. */
+    th:nth-child(5), td:nth-child(5){width:12%; text-align:center} /* Offen */
+    th:nth-child(6), td:nth-child(6){width:12%; text-align:center} /* Status */
+
+    #feedback.ok{color:var(--ok);font-weight:600}
+    #feedback.warn{color:var(--warn);font-weight:600}
+    #feedback.err{color:var(--err);font-weight:600}
     .status-erfasst{color:var(--warn);font-weight:600}
-    /* Nur der Tabellenbereich kann horizontal scrollen */
-    .table-scroll{overflow-x:auto;border:1px solid #1c2740;border-radius:10px}
+
     /* Visuelles Highlight bei Erfolg */
     .flash-green { animation: flashGreen 600ms ease-in-out; }
     @keyframes flashGreen { 0% { background-color: rgba(34,197,94,0.35); } 100% { background-color: transparent; } }
-    /* Kleine Bildschirme: Bedienelemente nicht umbrechen */
-    .row > * { white-space: nowrap; }
+
+    /* Mobile Feinschliff */
+    @media (max-width:420px){
+      body{font-size:13px}
+      input[type="file"],select,button{font-size:13px;padding:8px}
+      th,td{padding:7px 6px}
+      header h1{font-size:15px}
+    }
   </style>
 </head>
 <body>
   <header>
-    <h1 style="margin:0;font-size:18px">VRM Wareneingang – Kamera-OCR</h1>
-    <span class="badge">Build v9 (manueller Scan + Scroll-Tabelle)</span>
+    <h1>VRM Wareneingang – Kamera-OCR</h1>
+    <span class="badge">Build v10 (mobil, nur vertikal)</span>
   </header>
 
   <main>
@@ -56,7 +80,7 @@
         </select>
         <button id="export" class="primary">Bericht exportieren</button>
       </div>
-      <div class="hint">Empfohlen als Schlüssel: <b>Wagennummer</b> (alternativ: <b>LS</b>). Scannen per Button „Jetzt scannen“.</div>
+      <div class="hint">Empfohlen als Schlüssel: <b>Wagennummer</b> (alternativ <b>LS</b>). Scannen per Button „Jetzt scannen“.</div>
     </section>
 
     <!-- 2) KAMERA & OCR -->
@@ -65,10 +89,10 @@
         <button id="startCam" class="primary">Kamera starten</button>
         <button id="stopCam">Kamera stoppen</button>
         <button id="scanNow" class="primary">Jetzt scannen</button>
-        <label style="margin-left:10px"><input type="checkbox" id="beep" checked> Beep</label>
+        <label style="margin-left:6px"><input type="checkbox" id="beep" checked> Beep</label>
       </div>
 
-      <div style="margin-top:10px" class="row">
+      <div style="margin-top:8px" class="row">
         <div style="flex:1">
           <div class="hint">Letzter Scan:</div>
           <div id="lastScan" style="font-weight:700;font-size:16px">–</div>
@@ -81,18 +105,18 @@
       <div class="hint" id="ocrStatus">OCR bereit …</div>
     </section>
 
-    <!-- 3) TABELLE (unten, horizontal scrollbar) -->
+    <!-- 3) TABELLE (unten, passt in Bildschirmbreite) -->
     <section class="card">
-      <div class="table-scroll">
+      <div class="table-wrap">
         <table>
           <thead>
             <tr>
               <th>Schlüssel (gewählte Spalte)</th>
               <th>Artikel (erste Zeile)</th>
-              <th class="c">Erwartet</th>
-              <th class="c">Gesc.</th>
-              <th class="c">Offen</th>
-              <th class="c">Status</th>
+              <th>Erwartet</th>
+              <th>Gesc.</th>
+              <th>Offen</th>
+              <th>Status</th>
             </tr>
           </thead>
           <tbody id="tbody"></tbody>
@@ -110,7 +134,7 @@
 <script>
 // Optionaler Service Worker
 if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.register('./service-worker.js?v=9').catch(()=>{});
+  navigator.serviceWorker.register('./service-worker.js?v=10').catch(()=>{});
 }
 
 const $ = sel => document.querySelector(sel);
@@ -315,7 +339,7 @@ function checkOCRMatch(text){
 function flashRow(key){
   const row = [...document.querySelectorAll('#tbody tr')].find(tr => tr.dataset.key === key);
   if (!row) return;
-  row.classList.remove('flash-green'); // reset, damit Animation neu startet
+  row.classList.remove('flash-green'); // reset
   void row.offsetWidth;                // Reflow
   row.classList.add('flash-green');
 }

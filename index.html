@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no" />
   <title>VRM Wareneingang – Kamera-OCR</title>
   <meta name="theme-color" content="#0b1220" />
-  <link rel="manifest" href="manifest.json?v=11" />
+  <link rel="manifest" href="manifest.json?v=12" />
   <style>
     :root { --bg:#0b1220; --card:#121a2b; --muted:#9fb0d0; --ok:#23c55e; --warn:#f59e0b; --err:#ef4444; --txt:#e6eefc; --line:#1c2740; }
     *{box-sizing:border-box}
@@ -27,28 +27,15 @@
 
     video{width:100%;max-height:42vh;border-radius:10px;border:1px solid var(--line);background:#0f1729}
 
-    /* ===== Tabelle Desktop (>=600px): klassische Tabelle) ===== */
-    table{width:100%;border-collapse:collapse}
-    thead th{background:#0f1729}
-    th,td{border-bottom:1px solid var(--line);padding:8px 6px;text-align:left;vertical-align:top}
+    /* --- Nur die Tabelle darf horizontal scrollen --- */
+    .table-scroll{overflow-x:auto;border:1px solid var(--line);border-radius:10px}
+    table{width:100%;border-collapse:collapse;min-width:980px} /* breite Tabelle -> Scrollbar nur hier */
+    th,td{border-bottom:1px solid var(--line);padding:8px 6px;text-align:left;vertical-align:top;white-space:nowrap}
+    th{background:#0f1729;position:sticky;top:0;z-index:1}
+    td.c{text-align:center}
 
-    /* ===== Responsive Collapse: auf schmalen Screens (<600px) wird jede Tabellenzeile gestapelt ===== */
-    @media (max-width: 600px){
-      table, thead, tbody, th, td, tr { display:block; width:100%; }
-      thead { display:none; }
-      tbody tr { border:1px solid var(--line); border-radius:10px; margin-bottom:10px; overflow:hidden; }
-      /* Block 1: Schlüssel + Status nebeneinander */
-      td[data-label="Schlüssel"],
-      td[data-label="Status"] { display:inline-block; width:50%; box-sizing:border-box; }
-      td[data-label="Schlüssel"]{ font-weight:700; padding-bottom:6px; }
-      td[data-label="Status"]{ text-align:right; padding-bottom:6px; }
-      /* Block 2: Artikel volle Breite */
-      td[data-label="Artikel"]{ display:block; width:100%; padding-top:0; }
-      /* Block 3: Zahlenreihe in drei Spalten */
-      .row-nums{ display:flex; gap:6px; margin-top:6px; }
-      .row-nums > div{ flex:1; border:1px dashed var(--line); border-radius:8px; padding:6px; text-align:center; }
-      .label{display:block; color:var(--muted); font-size:12px; margin-bottom:2px}
-    }
+    /* Buttons/Inputs sollen NICHT horizontal scrollen */
+    .row > * { white-space: nowrap; }
 
     #feedback.ok{color:var(--ok);font-weight:600}
     #feedback.warn{color:var(--warn);font-weight:600}
@@ -59,7 +46,6 @@
     .flash-green { animation: flashGreen 600ms ease-in-out; }
     @keyframes flashGreen { 0% { background-color: rgba(34,197,94,0.35); } 100% { background-color: transparent; } }
 
-    /* Mobile Feinschliff */
     @media (max-width:420px){
       body{font-size:13px}
       input[type="file"],select,button{font-size:13px;padding:8px}
@@ -70,7 +56,7 @@
 <body>
   <header>
     <h1>VRM Wareneingang – Kamera-OCR</h1>
-    <span class="badge">Build v11 (responsive collapse)</span>
+    <span class="badge">Build v12 (nur Tabelle scrollt)</span>
   </header>
 
   <main>
@@ -113,21 +99,23 @@
       <div class="hint" id="ocrStatus">OCR bereit …</div>
     </section>
 
-    <!-- 3) TABELLE (unten, responsive collapse) -->
+    <!-- 3) TABELLE (unten, horizontal scrollbar) -->
     <section class="card">
-      <table>
-        <thead>
-          <tr>
-            <th>Schlüssel (gewählte Spalte)</th>
-            <th>Artikel (erste Zeile)</th>
-            <th>Erwartet</th>
-            <th>Gesc.</th>
-            <th>Offen</th>
-            <th>Status</th>
-          </tr>
-        </thead>
-        <tbody id="tbody"></tbody>
-      </table>
+      <div class="table-scroll">
+        <table>
+          <thead>
+            <tr>
+              <th>Schlüssel (gewählte Spalte)</th>
+              <th>Artikel (erste Zeile)</th>
+              <th class="c">Erwartet</th>
+              <th class="c">Gesc.</th>
+              <th class="c">Offen</th>
+              <th class="c">Status</th>
+            </tr>
+          </thead>
+          <tbody id="tbody"></tbody>
+        </table>
+      </div>
     </section>
 
     <!-- 4) LOG -->
@@ -140,7 +128,7 @@
 <script>
 // Optionaler Service Worker
 if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.register('./service-worker.js?v=11').catch(()=>{});
+  navigator.serviceWorker.register('./service-worker.js?v=12').catch(()=>{});
 }
 
 const $ = sel => document.querySelector(sel);
@@ -207,7 +195,6 @@ function renderTable(){
   const tb = document.getElementById('tbody');
   tb.innerHTML = '';
   const keys = Array.from(expect.keys()).sort((a,b)=>a.localeCompare(b));
-
   for (const k of keys){
     const exp = expect.get(k) || 0;
     const done = scanned.get(k) || 0;
@@ -219,51 +206,16 @@ function renderTable(){
     else if (done === exp){ status = 'ok';        cls = 'ok'; }
     else                 { status = 'überzählig'; cls = 'warn'; }
 
-    // Desktop: normale Tabelle
-    // Mobile: wir nutzen data-labels & extra "row-nums"-Block für die Zahlen
     const tr = document.createElement('tr');
-    tr.dataset.key = k;
-
-    // Schlüssel
-    const tdKey = document.createElement('td');
-    tdKey.setAttribute('data-label','Schlüssel');
-    tdKey.textContent = k;
-
-    // Artikel
-    const tdArt = document.createElement('td');
-    tdArt.setAttribute('data-label','Artikel');
-    tdArt.textContent = firstArticle.get(k) || '';
-
-    // Erwartet/Gesc./Offen (werden auf Mobile in Reihe angezeigt)
-    const tdExp = document.createElement('td'); tdExp.setAttribute('data-label','Erwartet'); tdExp.className='c'; tdExp.textContent = exp;
-    const tdDone= document.createElement('td'); tdDone.setAttribute('data-label','Gesc.');    tdDone.className='c'; tdDone.textContent = done;
-    const tdOpen= document.createElement('td'); tdOpen.setAttribute('data-label','Offen');    tdOpen.className='c'; tdOpen.textContent = open;
-
-    // Status
-    const tdStat= document.createElement('td'); tdStat.setAttribute('data-label','Status');   tdStat.className = 'c ' + cls; tdStat.textContent = status;
-
-    tr.appendChild(tdKey);
-    tr.appendChild(tdArt);
-
-    // Für Mobile die drei Zahlen in einem flex-Container zusammenfassen.
-    // Desktop bleibt es einfach drei Tds nacheinander.
-    if (window.matchMedia && window.matchMedia('(max-width: 600px)').matches) {
-      const tdWrap = document.createElement('td');
-      tdWrap.colSpan = 3; // nimmt Platz von Erwartet/Gesc./Offen ein
-      const rowNums = document.createElement('div');
-      rowNums.className = 'row-nums';
-      rowNums.innerHTML = `
-        <div><span class="label">Erwartet</span>${exp}</div>
-        <div><span class="label">Gesc.</span>${done}</div>
-        <div><span class="label">Offen</span>${open}</div>
-      `;
-      tdWrap.appendChild(rowNums);
-      tr.appendChild(tdWrap);
-    } else {
-      tr.appendChild(tdExp); tr.appendChild(tdDone); tr.appendChild(tdOpen);
-    }
-
-    tr.appendChild(tdStat);
+    tr.dataset.key = k; // für visuelles Highlight
+    tr.innerHTML = `
+      <td>${escapeHtml(k)}</td>
+      <td>${escapeHtml(firstArticle.get(k) || '')}</td>
+      <td class="c">${exp}</td>
+      <td class="c">${done}</td>
+      <td class="c">${open}</td>
+      <td class="c ${cls}">${status}</td>
+    `;
     tb.appendChild(tr);
   }
 }

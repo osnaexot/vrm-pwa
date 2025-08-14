@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>VRM PWA – Debug</title>
+<style>
+  body{font-family:system-ui,Segoe UI,Arial;background:#0b1220;color:#e6eefc;margin:0}
+  header{display:flex;justify-content:space-between;align-items:center;padding:12px 16px;background:#121a2b;border-bottom:1px solid #1c2740}
+  .badge{font-size:12px;padding:4px 8px;border-radius:999px;background:#0f1729;border:1px solid #1c2740;color:#9fb0d0}
+  main{padding:16px} button,input{background:#0f1729;color:#e6eefc;border:1px solid #1c2740;border-radius:8px;padding:8px 10px;margin-right:8px}
+  video{width:100%;max-height:50vh;border:1px solid #1c2740;border-radius:10px;background:#0f1729}
+  pre{white-space:pre-wrap;background:#0f1729;border:1px solid #1c2740;border-radius:10px;padding:10px}
+</style>
+</head>
+<body>
+<header>
+  <h1 style="margin:0;font-size:18px">VRM PWA – Debug</h1>
+  <span class="badge" id="ver"></span>
+</header>
+<main>
+  <h3>1) CSV-Test</h3>
+  <input id="file" type="file" accept=".csv,text/csv" />
+  <button id="parse">CSV parsen</button>
+  <div id="csvResult"></div>
+
+  <h3>2) Kamera-Test</h3>
+  <button id="startCam">Kamera starten</button>
+  <button id="stopCam">Kamera stoppen</button>
+  <div id="camStatus"></div>
+  <video id="video" autoplay playsinline></video>
+
+  <h3>3) Service-Worker</h3>
+  <button id="unregister">Service Worker entfernen</button>
+  <div id="swStatus"></div>
+
+  <h3>Konsole</h3>
+  <pre id="log"></pre>
+</main>
+<script>
+const ver = 'debug-' + new Date().toISOString().replace(/[:.Z-]/g,'').slice(0,14);
+document.getElementById('ver').textContent = ver;
+const log = (...a)=>{ const el=document.getElementById('log'); el.textContent += a.join(' ')+'\n'; console.log(...a); };
+
+document.getElementById('parse').onclick = async () => {
+  const f = document.getElementById('file').files[0];
+  if (!f) return alert('Bitte CSV wählen');
+  const txt = await f.text();
+  const lines = txt.split(/\r?\n/).slice(0,8).join('\n');
+  document.getElementById('csvResult').innerHTML = '<pre>'+lines.replace(/[&<>]/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[m]))+'</pre>';
+  log('CSV geladen, erste Zeilen gezeigt.');
+};
+
+let stream=null;
+document.getElementById('startCam').onclick = async () => {
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+    const v = document.getElementById('video'); v.srcObject = stream;
+    document.getElementById('camStatus').textContent = 'Kamera aktiv. Falls schwarz: Berechtigungen prüfen.';
+    log('Kamera gestartet.');
+  } catch(e) {
+    document.getElementById('camStatus').textContent = 'Fehler: '+e.name+' – '+e.message;
+    log('Kamera-Fehler:', e.name, e.message);
+  }
+};
+document.getElementById('stopCam').onclick = () => {
+  if (stream) { for (const t of stream.getTracks()) t.stop(); stream=null; }
+  document.getElementById('camStatus').textContent = 'Kamera gestoppt.'; log('Kamera gestoppt.');
+};
+document.getElementById('unregister').onclick = async () => {
+  if ('serviceWorker' in navigator) {
+    const regs = await navigator.serviceWorker.getRegistrations();
+    for (const r of regs) await r.unregister();
+    if (window.caches) { const keys = await caches.keys(); for (const k of keys) await caches.delete(k); }
+    document.getElementById('swStatus').textContent = 'Service Worker & Caches entfernt. Seite neu laden.';
+    log('SW & Cache entfernt.');
+  }
+};
+</script>
+</body>
+</html>

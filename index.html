@@ -5,16 +5,14 @@
   <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no" />
   <title>VRM Wareneingang – Kamera-OCR</title>
   <meta name="theme-color" content="#0b1220" />
-  <link rel="manifest" href="manifest.json?v=16" />
+  <link rel="manifest" href="manifest.json?v=17" />
   <style>
-    :root{
-      --bg:#0b1220; --card:#121a2b; --line:#1c2740; --txt:#e6eefc; --muted:#9fb0d0;
-      --ok:#23c55e; --warn:#f59e0b; --err:#ef4444;
-    }
+    :root { --bg:#0b1220; --card:#121a2b; --muted:#9fb0d0; --ok:#23c55e; --warn:#f59e0b; --err:#ef4444; --txt:#e6eefc; --line:#1c2740; }
     *{box-sizing:border-box}
     html,body{height:100%}
     body{margin:0;background:var(--bg);color:var(--txt);font:14px/1.35 system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial}
 
+    /* Header: kompakt, bricht um */
     header{padding:10px 12px;border-bottom:1px solid var(--line);display:flex;gap:8px;align-items:center;flex-wrap:wrap}
     header h1{margin:0;font-size:16px;flex:1 1 auto}
     .badge{font-size:11px;padding:3px 8px;border-radius:999px;background:#0f1729;border:1px solid var(--line);color:var(--muted)}
@@ -22,11 +20,11 @@
     main{padding:10px;display:grid;gap:10px;max-width:900px;margin:0 auto}
     .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:10px}
 
-    /* Controls kompakt: 2 Spalten mobil, 4 ab 720px */
+    /* Controls: kompakt, 2 Spalten mobil, 4 Spalten ab 720px */
     .controls{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
     @media (min-width:720px){ .controls{grid-template-columns:repeat(4,minmax(0,1fr));} }
 
-    input[type="file"], select, button{
+    input[type="file"],select,button{
       background:#0f1729;color:var(--txt);border:1px solid var(--line);
       border-radius:9px;padding:8px 10px;font-size:13px;min-width:0;max-width:100%;
     }
@@ -36,6 +34,13 @@
 
     video{width:100%;max-height:40vh;border-radius:10px;border:1px solid var(--line);background:#0f1729}
 
+    /* Nur die Tabelle darf horizontal scrollen */
+    .table-scroll{overflow-x:auto;-webkit-overflow-scrolling:touch;border:1px solid var(--line);border-radius:10px}
+    table{width:100%;border-collapse:collapse;min-width:980px}
+    th,td{border-bottom:1px solid var(--line);padding:8px 6px;text-align:left;vertical-align:top;white-space:nowrap}
+    th{background:#0f1729;position:sticky;top:0;z-index:1}
+    td.c{text-align:center}
+
     #feedback.ok{color:var(--ok);font-weight:600}
     #feedback.warn{color:var(--warn);font-weight:600}
     #feedback.err{color:var(--err);font-weight:600}
@@ -44,32 +49,23 @@
     .flash-green{animation:flashGreen 600ms ease-in-out}
     @keyframes flashGreen{0%{background:rgba(34,197,94,.35)}100%{background:transparent}}
 
+    /* Konsole wrappt, zieht nie die Seite breiter */
     pre#log{white-space:pre-wrap;word-wrap:break-word;overflow:auto;max-width:100%;
       background:#0f1729;border:1px solid var(--line);border-radius:10px;padding:10px;max-height:26vh}
 
-    /* Liste/Tabelle mobil als Karten (kein horizontales Scrollen) */
-    table{width:100%;border-collapse:collapse}
-    th,td{border-bottom:1px solid var(--line);padding:8px 6px;text-align:left;vertical-align:top}
-    th{background:#0f1729}
-    td.c{text-align:center}
-    @media (max-width:640px){
-      table, thead, tbody, th, td, tr{display:block;width:100%}
-      thead{display:none}
-      tbody tr{border:1px solid var(--line);border-radius:10px;margin-bottom:8px;overflow:hidden}
-      td[data-l="key"], td[data-l="status"]{display:inline-block;width:50%;box-sizing:border-box;padding-bottom:6px}
-      td[data-l="key"]{font-weight:700}
-      td[data-l="status"]{text-align:right}
-      td[data-l="art"]{display:block;width:100%;padding-top:0}
-      .nums{display:flex;gap:6px;margin-top:6px}
-      .nums>div{flex:1;border:1px dashed var(--line);border-radius:8px;padding:6px;text-align:center}
-      .nums .label{display:block;color:var(--muted);font-size:12px;margin-bottom:2px}
+    /* Handy: Controls untereinander, nur vertikales Scrollen */
+    @media (max-width: 640px){
+      .controls > * { flex: 1 1 100%; min-width: 0; }
+      header h1{font-size:15px}
+      body{font-size:13px}
+      input[type="file"],select,button{font-size:13px;padding:8px;width:100%}
     }
   </style>
 </head>
 <body>
   <header>
     <h1>VRM Wareneingang – Kamera-OCR</h1>
-    <span class="badge">Build v16 (stabile Kamera & CSV, kompakt)</span>
+    <span class="badge">Build v17 (Layout fix + Logik aus v11/v12)</span>
   </header>
 
   <main>
@@ -77,26 +73,25 @@
     <section class="card">
       <div class="controls">
         <input id="file" type="file" accept=".csv,text/csv" />
-        <button id="btnLoad" class="primary">CSV</button>
-        <select id="keyCol" title="Schlüssel" disabled></select>
-        <select id="qtyCol" title="Menge" disabled></select>
-        <select id="lang" title="OCR">
-          <option value="eng">EN</option>
-          <option value="deu">DE</option>
-          <option value="eng+deu" selected>EN+DE</option>
+        <button id="btnLoad" class="primary">CSV übernehmen</button>
+        <select id="keyCol" title="Schlüssel-Spalte" disabled></select>
+        <select id="qtyCol" title="Mengen-Spalte" disabled></select>
+        <select id="lang" title="OCR-Sprache">
+          <option value="eng">OCR: Englisch</option>
+          <option value="deu">OCR: Deutsch</option>
+          <option value="eng+deu" selected>OCR: Englisch+Deutsch</option>
         </select>
-        <button id="export">Report</button>
+        <button id="export">Bericht exportieren</button>
       </div>
-      <div class="hint">Empfohlener Schlüssel: <b>Wagennummer</b> (alternativ <b>LS</b>). Scannen per „Scannen“.</div>
-      <div class="hint" id="csvInfo"></div>
+      <div class="hint" id="csvInfo">Empfohlener Schlüssel: <b>Wagennummer</b> (alternativ <b>LS</b>).</div>
     </section>
 
-    <!-- 2) Kamera & OCR -->
+    <!-- 2) KAMERA & OCR -->
     <section class="card">
       <div class="controls">
-        <button id="startCam" class="primary">Start</button>
-        <button id="stopCam">Stop</button>
-        <button id="scanNow" class="primary">Scannen</button>
+        <button id="startCam" class="primary">Kamera starten</button>
+        <button id="stopCam">Kamera stoppen</button>
+        <button id="scanNow" class="primary">Jetzt scannen</button>
         <label style="display:flex;align-items:center;gap:6px"><input type="checkbox" id="beep" checked> Beep</label>
       </div>
 
@@ -108,27 +103,29 @@
       </div>
 
       <video id="video" autoplay playsinline></video>
-      <div class="hint" id="ocrStatus">OCR wird bei Bedarf im Hintergrund geladen …</div>
+      <div class="hint" id="ocrStatus">OCR bereit …</div>
     </section>
 
-    <!-- 3) Liste/Tabelle -->
+    <!-- 3) TABELLE (nur hier horizontaler Scroll erlaubt) -->
     <section class="card">
-      <table>
-        <thead>
-          <tr>
-            <th>Schlüssel</th>
-            <th>Artikel</th>
-            <th class="c">Erw.</th>
-            <th class="c">Gesc.</th>
-            <th class="c">Offen</th>
-            <th class="c">Status</th>
-          </tr>
-        </thead>
-        <tbody id="tbody"></tbody>
-      </table>
+      <div class="table-scroll">
+        <table>
+          <thead>
+            <tr>
+              <th>Schlüssel</th>
+              <th>Artikel</th>
+              <th class="c">Erwartet</th>
+              <th class="c">Gesc.</th>
+              <th class="c">Offen</th>
+              <th class="c">Status</th>
+            </tr>
+          </thead>
+          <tbody id="tbody"></tbody>
+        </table>
+      </div>
     </section>
 
-    <!-- 4) Log -->
+    <!-- 4) LOG -->
     <section class="card">
       <div class="hint">Konsole</div>
       <pre id="log"></pre>
@@ -136,220 +133,291 @@
   </main>
 
 <script>
-if ('serviceWorker' in navigator){ navigator.serviceWorker.register('./service-worker.js?v=16').catch(()=>{}); }
-const $=s=>document.querySelector(s); const log=(...a)=>{ $('#log').textContent+=a.join(' ')+'\\n'; console.log(...a); };
+// Optionaler Service Worker
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('./service-worker.js?v=17').catch(()=>{});
+}
 
-/* ===== CSV ===== */
-let headers=[], rows=[], expect=new Map(), scanned=new Map(), firstArticle=new Map();
+const $ = sel => document.querySelector(sel);
+const log = (...a)=>{ const el=$('#log'); el.textContent += a.join(' ') + '\n'; console.log(...a); };
+
+/* ================== CSV (wie v11/v12) ================== */
+let headers=[], rows=[];
+let expect=new Map(), scanned=new Map(), firstArticle=new Map();
 let keyName='LS', qtyName='Bretter';
 
-$('#btnLoad').addEventListener('click', async ()=>{
-  const f=$('#file').files[0]; if(!f) return alert('Bitte CSV wählen.');
-  const t=await f.text(); const d=detectDelimiter(t); const data=parseCSV(t,d);
-  if(!data.length) return alert('CSV leer.');
-  headers=data[0].map(h=>h.trim()); rows=data.slice(1);
-  $('#csvInfo').textContent=`Trennzeichen: "${d}" • Spalten: ${headers.length} • Zeilen: ${rows.length}`;
-  log('CSV übernommen. Spalten:', headers.join(' | '));
-  log(`Zeilen gesamt: ${rows.length}, Trennzeichen: "${d}"`);
+$('#btnLoad').addEventListener('click', async () => {
+  try{
+    const file = $('#file').files[0];
+    if (!file) return alert('Bitte zuerst eine CSV-Datei auswählen.');
+    const text = await file.text();
+    const delim = detectDelimiter(text);
+    const data = parseCSV(text, delim);
+    if (!data.length) { alert('CSV ist leer.'); return; }
 
-  // Dropdowns
-  const keySel=$('#keyCol'), qtySel=$('#qtyCol'); keySel.innerHTML=''; qtySel.innerHTML='';
-  headers.forEach(h=>{
-    const o1=document.createElement('option');o1.value=h;o1.textContent=h;keySel.appendChild(o1);
-    const o2=document.createElement('option');o2.value=h;o2.textContent=h;qtySel.appendChild(o2);
-  });
-  keyName=headers.includes('Wagennummer')?'Wagennummer':(headers.includes('LS')?'LS':headers[0]); keySel.value=keyName; keySel.disabled=false;
-  if(headers.includes('Bretter')){ qtyName='Bretter'; qtySel.value='Bretter'; } else { const o=document.createElement('option');o.value='<keine>';o.textContent='<keine>';qtySel.prepend(o);qtySel.value='<keine>'; qtyName='<keine>'; }
-  qtySel.disabled=false;
+    headers = data[0].map(h => h.trim());
+    rows = data.slice(1);
+    $('#csvInfo').textContent = `Trennzeichen: "${delim}" • Spalten: ${headers.length} • Zeilen: ${rows.length}`;
 
-  applyMapping(); status();
+    // Dropdowns füllen
+    const keySel = $('#keyCol'), qtySel = $('#qtyCol');
+    keySel.innerHTML=''; qtySel.innerHTML='';
+    headers.forEach(h => {
+      const o1=document.createElement('option'); o1.value=h; o1.textContent=h; keySel.appendChild(o1);
+      const o2=document.createElement('option'); o2.value=h; o2.textContent=h; qtySel.appendChild(o2);
+    });
+
+    // Defaults wie v11/v12
+    keyName = headers.includes('Wagennummer') ? 'Wagennummer' : (headers.includes('LS') ? 'LS' : headers[0]);
+    keySel.value = keyName;
+    keySel.disabled=false;
+
+    if (headers.includes('Bretter')) {
+      qtyName = 'Bretter'; qtySel.value='Bretter';
+    } else {
+      const opt = document.createElement('option'); opt.value='<keine>'; opt.textContent='<keine>'; qtySel.prepend(opt); qtySel.value='<keine>';
+      qtyName = '<keine>';
+    }
+    qtySel.disabled=false;
+
+    applyMapping(); status();
+    log('CSV übernommen. Spalten:', headers.join(' | '));
+  }catch(e){
+    alert('CSV-Fehler: '+(e.message||e));
+    log('CSV-Fehler:', e);
+  }
 });
-$('#keyCol').addEventListener('change',e=>{ keyName=e.target.value; applyMapping(); status(); });
-$('#qtyCol').addEventListener('change',e=>{ qtyName=e.target.value; applyMapping(); status(); });
+
+$('#keyCol').addEventListener('change', e => { keyName=e.target.value; applyMapping(); status(); });
+$('#qtyCol').addEventListener('change', e => { qtyName=e.target.value; applyMapping(); status(); });
 
 function applyMapping(){
   expect.clear(); scanned.clear(); firstArticle.clear();
-  const kIdx=headers.indexOf(keyName);
-  const qIdx=(qtyName && qtyName!=='<keine>')?headers.indexOf(qtyName):-1;
-  const aIdx=headers.indexOf('Artikelname');
-  let rowsCount=0;
-  for(const r of rows){
-    if(!r || !r.length) continue;
-    rowsCount++;
-    if(kIdx<0||kIdx>=r.length) continue;
-    const key=String(r[kIdx]??'').trim(); if(!key) continue;
-    let q=1; if(qIdx>=0&&qIdx<r.length) q=toInt(r[qIdx],1);
-    expect.set(key,(expect.get(key)||0)+(q>0?q:1));
-    if(!firstArticle.has(key)&&aIdx>=0&&aIdx<r.length) firstArticle.set(key,String(r[aIdx]??''));
+  const kIdx = headers.indexOf(keyName);
+  const qIdx = (qtyName && qtyName!=='<keine>') ? headers.indexOf(qtyName) : -1;
+  const aIdx = headers.indexOf('Artikelname');
+
+  for (const r of rows) {
+    if (!r || !r.length) continue;
+    if (kIdx<0 || kIdx>=r.length) continue;
+    const key = String(r[kIdx] ?? '').trim();
+    if (!key) continue;
+    let q = 1;
+    if (qIdx>=0 && qIdx<r.length) q = toInt(r[qIdx],1);
+    expect.set(key, (expect.get(key)||0) + (q>0?q:1));
+    if (!firstArticle.has(key) && aIdx>=0 && aIdx<r.length) firstArticle.set(key, String(r[aIdx] ?? ''));
   }
-  log(`applyMapping: verarbeitete Zeilen: ${rowsCount}, eindeutige Schlüssel: ${expect.size}`);
-  renderTable(); $('#lastScan').textContent='–'; setFeedback('', '');
+  renderTable();
+  $('#lastScan').textContent='–'; setFeedback('', '');
 }
 
-/* ===== Tabelle (mobil als Karten) ===== */
 function renderTable(){
-  const tb=$('#tbody'); tb.innerHTML='';
-  const keys=[...expect.keys()].sort((a,b)=>a.localeCompare(b));
-  const isMobile=window.matchMedia('(max-width:640px)').matches;
+  const tb = document.getElementById('tbody');
+  tb.innerHTML = '';
+  const keys = Array.from(expect.keys()).sort((a,b)=>a.localeCompare(b));
+  for (const k of keys){
+    const exp = expect.get(k) || 0;
+    const done = scanned.get(k) || 0;
+    const open = Math.max(exp - done, 0);
 
-  for(const k of keys){
-    const exp=expect.get(k)||0, done=scanned.get(k)||0, open=Math.max(exp-done,0);
-    let status='offen', cls='';
-    if(done===0){status='offen'} else if(done<exp){status='erfasst';cls='status-erfasst'} else if(done===exp){status='ok'} else {status='überzählig';cls='warn'}
+    let status = 'offen', cls = '';
+    if (done === 0)      { status = 'offen';      cls = ''; }
+    else if (done < exp) { status = 'erfasst';    cls = 'status-erfasst'; }
+    else if (done === exp){ status = 'ok';        cls = 'ok'; }
+    else                 { status = 'überzählig'; cls = 'warn'; }
 
-    if(isMobile){
-      const tr=document.createElement('tr'); tr.dataset.key=k;
-      const tdKey=document.createElement('td'); tdKey.dataset.l='key'; tdKey.textContent=k;
-      const tdStatus=document.createElement('td'); tdStatus.dataset.l='status'; tdStatus.className='c '+cls; tdStatus.textContent=status;
-      const tdArt=document.createElement('td'); tdArt.dataset.l='art'; tdArt.textContent=firstArticle.get(k)||'';
-      const tdNums=document.createElement('td'); const wrap=document.createElement('div'); wrap.className='nums';
-      wrap.innerHTML=`<div><span class="label">Erw.</span>${exp}</div><div><span class="label">Gesc.</span>${done}</div><div><span class="label">Offen</span>${open}</div>`;
-      tdNums.appendChild(wrap);
-      tr.append(tdKey,tdStatus,tdArt,tdNums);
-      tb.appendChild(tr);
-    }else{
-      const tr=document.createElement('tr'); tr.dataset.key=k;
-      tr.innerHTML=`<td>${escapeHtml(k)}</td><td>${escapeHtml(firstArticle.get(k)||'')}</td>
-        <td class="c">${exp}</td><td class="c">${done}</td><td class="c">${open}</td><td class="c ${cls}">${status}</td>`;
-      tb.appendChild(tr);
-    }
+    const tr = document.createElement('tr');
+    tr.dataset.key = k;
+    tr.innerHTML = `
+      <td>${escapeHtml(k)}</td>
+      <td>${escapeHtml(firstArticle.get(k) || '')}</td>
+      <td class="c">${exp}</td>
+      <td class="c">${done}</td>
+      <td class="c">${open}</td>
+      <td class="c ${cls}">${status}</td>
+    `;
+    tb.appendChild(tr);
   }
 }
 
-/* ===== Export ===== */
-$('#export').addEventListener('click', ()=>{
-  if(!expect.size) return alert('Kein Datensatz.');
-  const out=[["Schlüssel","Artikel","Erwartet","Gescant","Offen","Status"]];
-  const keys=[...expect.keys()].sort((a,b)=>a.localeCompare(b));
-  for(const k of keys){
+document.getElementById('export').addEventListener('click', ()=>{
+  if (!expect.size) return alert('Kein Datensatz geladen.');
+  const out=[["Schlüssel","Artikel (erste Zeile)","Erwartet","Gescant","Offen","Status"]];
+  const keys=Array.from(expect.keys()).sort((a,b)=>a.localeCompare(b));
+  for (const k of keys){
     const exp=expect.get(k)||0, done=scanned.get(k)||0, open=Math.max(exp-done,0);
-    let s='offen'; if(done===0)s='offen'; else if(done<exp)s='erfasst'; else if(done===exp)s='ok'; else s='überzählig';
-    out.push([k,firstArticle.get(k)||"",exp,done,open,s]);
+    let s='offen'; if (done===0) s='offen'; else if (done<exp) s='erfasst'; else if (done===exp) s='ok'; else s='überzählig';
+    out.push([k, firstArticle.get(k)||"", exp, done, open, s]);
   }
   const ts=new Date().toISOString().replace(/[:\-]/g,'').slice(0,15);
-  downloadCSV(`wareneingang_report_${ts}.csv`,out);
+  downloadCSV(`wareneingang_report_${ts}.csv`, out);
 });
 
-/* ===== Kamera & OCR ===== */
-let videoStream=null, workerReady=false, ocrLang='eng+deu';
+/* ================== Kamera & OCR (wie v11/v12) ================== */
+let videoStream=null, workerReady=false;
+let ocrLang='eng+deu';
 
-$('#lang').addEventListener('change',e=>{ ocrLang=e.target.value; setFeedback(`OCR: ${ocrLang}`,''); });
+document.getElementById('lang').addEventListener('change', e => { ocrLang=e.target.value; setFeedback(`OCR-Sprache: ${ocrLang}`, ''); });
 
-$('#startCam').addEventListener('click', async ()=>{
+document.getElementById('startCam').addEventListener('click', startCamera);
+document.getElementById('stopCam').addEventListener('click', stopCamera);
+document.getElementById('scanNow').addEventListener('click', () => {
+  const video = $('#video');
+  if (video.srcObject) captureAndOCR(video);
+  else setFeedback('Kamera ist nicht aktiv.', 'err');
+});
+
+async function startCamera(){
   try{
-    const v=$('#video');
-    // Kamera SOFORT starten
-    videoStream=await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'}});
-    v.srcObject=videoStream;
-    setFeedback('Kamera aktiv.',''); log('Kamera gestartet.');
-    // OCR im Hintergrund laden (blockiert Kamera NICHT)
-    ensureWorker().catch(err=>{ log('OCR-Ladefehler:', err.message||err); $('#ocrStatus').textContent='OCR konnte nicht geladen werden. Scannen nur mit Kamera-Start möglich.'; });
+    const video=$('#video');
+    // Einfaches Constraint-Set wie v11/v12
+    videoStream = await navigator.mediaDevices.getUserMedia({ video:{ facingMode:'environment' } });
+    video.srcObject = videoStream;
+    setFeedback('Kamera aktiv. Bereit zum Scannen.', '');
+    log('Kamera gestartet');
+
+    // OCR Worker wie v11/v12
+    await ensureWorker();
+    $('#ocrStatus').textContent='OCR bereit.';
   }catch(e){
-    setFeedback('Kamera-Fehler: '+e.message,'err'); log('Kamera-Fehler:', e.name, e.message);
+    setFeedback('Kamera-Fehler: '+e.message, 'err');
+    log('Kamera-Fehler:', e.name, e.message);
   }
-});
+}
 
-$('#stopCam').addEventListener('click', ()=>{
-  if(videoStream){ for(const t of videoStream.getTracks()) t.stop(); videoStream=null; }
-  setFeedback('Kamera gestoppt.',''); log('Kamera gestoppt.');
-});
-
-$('#scanNow').addEventListener('click', ()=>{
-  const v=$('#video'); if(v.srcObject) captureAndOCR(v); else setFeedback('Kamera nicht aktiv.','err');
-});
+function stopCamera(){
+  if (videoStream){ for (const t of videoStream.getTracks()) t.stop(); videoStream=null; }
+  setFeedback('Kamera gestoppt.', '');
+}
 
 async function ensureWorker(){
-  if(workerReady) return;
-  $('#ocrStatus').textContent='OCR wird geladen … (einmalig 10–20s)';
-  if(!window.Tesseract){
-    await new Promise((resolve, reject)=>{
+  if (workerReady) return;
+  $('#ocrStatus').textContent='Lade OCR … (erster Start 10–20s)';
+  if (!window.Tesseract){
+    await new Promise((resolve,reject)=>{
       const s=document.createElement('script');
       s.src='https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js';
       s.onload=resolve; s.onerror=reject;
       document.head.appendChild(s);
     });
   }
-  window._tessWorker=window._tessWorker||await Tesseract.createWorker();
+  window._tessWorker = window._tessWorker || await Tesseract.createWorker();
   await _tessWorker.loadLanguage(ocrLang);
   await _tessWorker.initialize(ocrLang);
   workerReady=true;
-  $('#ocrStatus').textContent='OCR bereit.';
 }
 
 async function captureAndOCR(video){
-  try{
-    if(!workerReady || !_tessWorker){ setFeedback('OCR noch nicht bereit.','warn'); return; }
-    const c=document.createElement('canvas'), w=video.videoWidth, h=video.videoHeight; if(!w||!h){ setFeedback('Kamerabild noch nicht bereit.','warn'); return; }
-    c.width=w; c.height=h; const ctx=c.getContext('2d');
-    const cw=Math.floor(w*0.9), ch=Math.floor(h*0.6), sx=Math.floor((w-cw)/2), sy=Math.floor((h-ch)/2);
-    ctx.drawImage(video,sx,sy,cw,ch,0,0,cw,ch);
-    $('#ocrStatus').textContent='Erkenne Text …';
-    const {data:{text}}=await _tessWorker.recognize(c);
-    const clean=text.trim().replace(/\s+/g,' ');
-    $('#ocrStatus').textContent='Gefundener Text: '+clean;
-    checkOCRMatch(clean);
-  }catch(e){
-    setFeedback('OCR-Fehler: '+(e.message||e),'err'); log('OCR-Fehler:', e);
-  }
+  if (!workerReady || !_tessWorker) { setFeedback('OCR noch nicht bereit.', 'warn'); return; }
+  const canvas=document.createElement('canvas');
+  const w=video.videoWidth, h=video.videoHeight;
+  if (!w || !h) { setFeedback('Kamerabild noch nicht bereit.', 'warn'); return; }
+
+  canvas.width=w; canvas.height=h;
+  const ctx=canvas.getContext('2d');
+  const cw=Math.floor(w*0.9), ch=Math.floor(h*0.6);
+  const sx=Math.floor((w-cw)/2), sy=Math.floor((h-ch)/2);
+  ctx.drawImage(video, sx, sy, cw, ch, 0, 0, cw, ch);
+  $('#ocrStatus').textContent='Erkenne Text …';
+
+  const { data:{ text } } = await _tessWorker.recognize(canvas);
+  const clean=text.trim().replace(/\s+/g,' ');
+  $('#ocrStatus').textContent='Gefundener Text: '+clean;
+  checkOCRMatch(clean);
 }
 
-/* ===== Matching & Feedback ===== */
+/* ================== Matching & Feedback ================== */
 function checkOCRMatch(text){
-  if(!expect.size){ setFeedback('Bitte zuerst CSV übernehmen.','err'); return; }
-  const tokens=(text||'').toUpperCase().replace(/[^A-Z0-9]+/g,' ').split(' ').filter(t=>t.length>=4&&t.length<=12);
-  const map=new Map(); for(const k of expect.keys()) map.set(String(k).toUpperCase(),k);
-  for(const t of tokens){
-    if(map.has(t)){
-      const key=map.get(t), prev=scanned.get(key)||0, done=prev+1; scanned.set(key,done);
-      $('#lastScan').textContent=key;
-      const exp=expect.get(key)||0;
-      if(done<exp){ setFeedback(`✅ ${key}: erfasst ${done}/${exp}`,'warn'); beep(880,90); flashRow(key); }
-      else if(done===exp){ setFeedback(`✅ ${key}: vollständig (${done}/${exp})`,'ok'); beep(1200,120); flashRow(key); }
-      else { setFeedback(`⚠️ ${key}: überzählig (${done}/${exp})`,'warn'); beep(600,150); flashRow(key); }
-      renderTable(); status(); if(navigator.vibrate) navigator.vibrate(80);
+  if (!expect.size) { setFeedback('Bitte zuerst CSV übernehmen.', 'err'); return; }
+  const tokens = (text||'').toUpperCase().replace(/[^A-Z0-9]+/g,' ').split(' ').filter(t=>t.length>=4 && t.length<=12);
+  const keyMap = new Map(); for (const key of expect.keys()) { if (!key) continue; keyMap.set(String(key).toUpperCase(), key); }
+
+  for (const tok of tokens){
+    if (keyMap.has(tok)){
+      const key = keyMap.get(tok);
+      const prev = scanned.get(key) || 0;
+      const done = prev + 1;
+      scanned.set(key, done);
+      document.getElementById('lastScan').textContent = key;
+
+      const exp = expect.get(key) || 0;
+      if (done < exp) { setFeedback(`✅ ${key}: erfasst ${done}/${exp}`, 'warn'); beep(880, 90); flashRow(key); }
+      else if (done === exp) { setFeedback(`✅ ${key}: vollständig (${done}/${exp})`, 'ok'); beep(1200, 120); flashRow(key); }
+      else { setFeedback(`⚠️ ${key}: ÜBERZÄHLIG (${done}/${exp})`, 'warn'); beep(600, 150); flashRow(key); }
+
+      renderTable(); status();
+      if (navigator.vibrate) { navigator.vibrate(80); }
       return;
     }
   }
-  setFeedback('❌ Kein Schlüssel im OCR-Text gefunden','err'); beep(300,140);
+  setFeedback('❌ Kein Schlüssel im OCR-Text gefunden', 'err');
+  beep(300, 140);
 }
 
 function flashRow(key){
-  const row=[...document.querySelectorAll('#tbody tr')].find(tr=>tr.dataset.key===key);
-  if(!row) return; row.classList.remove('flash-green'); void row.offsetWidth; row.classList.add('flash-green');
+  const row = [...document.querySelectorAll('#tbody tr')].find(tr => tr.dataset.key === key);
+  if (!row) return;
+  row.classList.remove('flash-green'); // reset
+  void row.offsetWidth;                // Reflow
+  row.classList.add('flash-green');
 }
 
-/* ===== Status & Beep ===== */
+/* ================== Status & Beep ================== */
 function status(){
-  const totExp=[...expect.values()].reduce((a,b)=>a+b,0);
-  const totDone=[...scanned.values()].reduce((a,b)=>a+b,0);
-  const totOpen=Math.max(totExp-totDone,0);
-  $('#statusbar').textContent=`Gesamt: erwartet ${totExp} • gescannt ${totDone} • offen ${totOpen}`;
+  const totalExp=[...expect.values()].reduce((a,b)=>a+b,0);
+  const totalDone=[...scanned.values()].reduce((a,b)=>a+b,0);
+  const totalOpen=Math.max(totalExp-totalDone,0);
+  $('#statusbar').textContent=`Gesamt: erwartet ${totalExp} • gescannt ${totalDone} • offen ${totalOpen}`;
 }
-function setFeedback(t,cls){ const f=$('#feedback'); f.textContent=t; f.className=cls||''; }
+function setFeedback(text, type){
+  const f=$('#feedback'); f.textContent=text; f.className=type||'';
+}
 
 let audioCtx;
-function beep(freq=440,dur=100){
-  if(!$('#beep').checked) return;
+function beep(freq=440, dur=100){
+  if (!$('#beep').checked) return;
   try{
-    audioCtx=audioCtx||new (window.AudioContext||window.webkitAudioContext)();
-    const o=audioCtx.createOscillator(), g=audioCtx.createGain(); o.connect(g); g.connect(audioCtx.destination);
-    o.frequency.value=freq; o.type='sine';
-    const now=audioCtx.currentTime; g.gain.setValueAtTime(0.0001,now); g.gain.exponentialRampToValueAtTime(0.15,now+0.02);
-    o.start(); g.gain.exponentialRampToValueAtTime(0.0001,now+dur/1000); o.stop(now+dur/1000+0.02);
+    audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+    const o = audioCtx.createOscillator();
+    const g = audioCtx.createGain();
+    o.connect(g); g.connect(audioCtx.destination);
+    o.frequency.value = freq; o.type = 'sine';
+    const now = audioCtx.currentTime;
+    g.gain.setValueAtTime(0.0001, now);
+    g.gain.exponentialRampToValueAtTime(0.15, now + 0.02);
+    o.start();
+    g.gain.exponentialRampToValueAtTime(0.0001, now + dur/1000);
+    o.stop(now + dur/1000 + 0.02);
   }catch(e){}
 }
 
-/* ===== Utils ===== */
-function detectDelimiter(t){ const s=t.split(/\\r?\\n/).slice(0,20).join('\\n'); const c={',':0,';':0,'\\t':0,'|':0}; let q=false;
-  for(let i=0;i<s.length;i++){ const ch=s[i]; if(ch=='"') q=!q; else if(!q && c.hasOwnProperty(ch)) c[ch]++; } return Object.entries(c).sort((a,b)=>b[1]-a[1])[0][0]; }
-function parseCSV(t,d){ const r=[]; let i=0,f='',row=[],q=false; while(i<t.length){ const ch=t[i];
-  if(q){ if(ch=='"'){ if(t[i+1]=='"'){f+='"'; i+=2; continue;} q=false; i++; continue;} f+=ch; i++; continue;}
-  if(ch=='"'){ q=true; i++; continue;} if(ch=='\\r'){ i++; continue;} if(ch=='\\n'){ row.push(f); r.push(row); f=''; row=[]; i++; continue;}
-  if(ch==d){ row.push(f); f=''; i++; continue;} f+=ch; i++; } row.push(f); r.push(row);
-  if(r.length && r[0].length && r[0][0] && r[0][0].charCodeAt(0)===0xFEFF) r[0][0]=r[0][0].slice(1); return r; }
-function toInt(v,d=0){ if(v==null) return d; const s=String(v).trim().replace(/[€\\s]/g,'').replace(/\\./g,'').replace(/,/g,'.'); const n=parseFloat(s); return Number.isFinite(n)?Math.max(0,Math.round(n)):d; }
-function downloadCSV(name,rows){ const csv=rows.map(r=>r.map(x=>{ const s=String(x??''); return /[;"\\n,]/.test(s)?`"${s.replace(/"/g,'""')}"`:s; }).join(';')).join('\\n'); const blob=new Blob([csv],{type:'text/csv'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=name; a.click(); URL.revokeObjectURL(a.href); }
-function escapeHtml(s){ return String(s).replace(/[&<>\"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',\"'\":'&#039;'}[m])); }
+/* ================== Utils (wie v11/v12) ================== */
+function detectDelimiter(text){
+  const sample=text.split(/\r?\n/).slice(0,20).join('\n');
+  const counts={',':0,';':0,'\t':0,'|':0}; let inQ=false;
+  for (let i=0;i<sample.length;i++){ const ch=sample[i];
+    if (ch === '"') inQ=!inQ; else if(!inQ && counts.hasOwnProperty(ch)) counts[ch]++; }
+  return Object.entries(counts).sort((a,b)=>b[1]-a[1])[0][0];
+}
+function parseCSV(text,delim){
+  const rows=[]; let i=0,field='',row=[],inQ=false;
+  while(i<text.length){ const ch=text[i];
+    if(inQ){ if(ch=== '"'){ if(text[i+1]==='"'){ field+='"'; i+=2; continue;} inQ=false; i++; continue;} field+=ch; i++; continue; }
+    if(ch=== '"'){ inQ=true; i++; continue; }
+    if(ch=== '\r'){ i++; continue; }
+    if(ch=== '\n'){ row.push(field); rows.push(row); field=''; row=[]; i++; continue; }
+    if(ch===delim){ row.push(field); field=''; i++; continue; }
+    field+=ch; i++;
+  } row.push(field); rows.push(row);
+  if(rows.length && rows[0].length && rows[0][0] && rows[0][0].charCodeAt(0)===0xFEFF){ rows[0][0]=rows[0][0].slice(1); }
+  return rows;
+}
+function toInt(v, def=0){ if(v==null) return def; const s=String(v).trim().replace(/[€\s]/g,'').replace(/\./g,'').replace(/,/g,'.'); const n=parseFloat(s); return Number.isFinite(n)?Math.max(0,Math.round(n)):def; }
+function downloadCSV(filename, rows){
+  const csv=rows.map(r=>r.map(x=>{ const s=String(x??''); return /[;"\n,]/.test(s)?`"${s.replace(/"/g,'""')}"`:s; }).join(';')).join('\n');
+  const blob=new Blob([csv],{type:'text/csv;charset=utf-8;'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=filename; a.click(); URL.revokeObjectURL(a.href);
+}
+function escapeHtml(s){ return String(s).replace(/[&<>"']/g, m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m])); }
 </script>
 </body>
 </html>

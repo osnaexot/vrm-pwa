@@ -5,67 +5,77 @@
   <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no" />
   <title>VRM Wareneingang – Kamera-OCR</title>
   <meta name="theme-color" content="#0b1220" />
-  <link rel="manifest" href="manifest.json?v=17" />
+  <link rel="manifest" href="manifest.json?v=18" />
   <style>
     :root { --bg:#0b1220; --card:#121a2b; --muted:#9fb0d0; --ok:#23c55e; --warn:#f59e0b; --err:#ef4444; --txt:#e6eefc; --line:#1c2740; }
     *{box-sizing:border-box}
-    html,body{height:100%}
+    html,body{height:100%; overflow-x:hidden;}
     body{margin:0;background:var(--bg);color:var(--txt);font:14px/1.35 system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial}
 
-    /* Header: kompakt, bricht um */
-    header{padding:10px 12px;border-bottom:1px solid var(--line);display:flex;gap:8px;align-items:center;flex-wrap:wrap}
-    header h1{margin:0;font-size:16px;flex:1 1 auto}
-    .badge{font-size:11px;padding:3px 8px;border-radius:999px;background:#0f1729;border:1px solid var(--line);color:var(--muted)}
+    /* Header kompakt, umbruchtauglich – keine Breitenvergrößerung */
+    header{padding:10px 12px;border-bottom:1px solid var(--line);display:flex;gap:8px;align-items:center;flex-wrap:wrap;max-width:100vw}
+    header h1{margin:0;font-size:16px;flex:1 1 auto;min-width:0}
+    .badge{font-size:11px;padding:3px 8px;border-radius:999px;background:#0f1729;border:1px solid var(--line);color:var(--muted);max-width:100%}
 
     main{padding:10px;display:grid;gap:10px;max-width:900px;margin:0 auto}
-    .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:10px}
+    .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:10px;max-width:100%}
 
-    /* Controls: kompakt, 2 Spalten mobil, 4 Spalten ab 720px */
+    /* Controls: Grid, bricht sauber um; Elemente ziehen nie breiter als 100% */
     .controls{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
     @media (min-width:720px){ .controls{grid-template-columns:repeat(4,minmax(0,1fr));} }
-
     input[type="file"],select,button{
       background:#0f1729;color:var(--txt);border:1px solid var(--line);
-      border-radius:9px;padding:8px 10px;font-size:13px;min-width:0;max-width:100%;
+      border-radius:9px;padding:8px 10px;font-size:13px;min-width:0;max-width:100%;width:100%;
     }
     button{cursor:pointer;white-space:nowrap}
     .primary{background:linear-gradient(180deg,#2563eb,#1d4ed8);border:none}
     .hint{color:var(--muted);font-size:12px;margin-top:6px}
 
-    video{width:100%;max-height:40vh;border-radius:10px;border:1px solid var(--line);background:#0f1729}
+    /* Datei-Input: nie zu breit */
+    input[type="file"]{padding:6px 8px;font-size:12px}
+    input[type="file"]::-webkit-file-upload-button{padding:6px 8px;font-size:12px}
 
-    /* Nur die Tabelle darf horizontal scrollen */
-    .table-scroll{overflow-x:auto;-webkit-overflow-scrolling:touch;border:1px solid var(--line);border-radius:10px}
-    table{width:100%;border-collapse:collapse;min-width:980px}
-    th,td{border-bottom:1px solid var(--line);padding:8px 6px;text-align:left;vertical-align:top;white-space:nowrap}
-    th{background:#0f1729;position:sticky;top:0;z-index:1}
-    td.c{text-align:center}
+    video{width:100%;max-height:40vh;border-radius:10px;border:1px solid var(--line);background:#0f1729;max-width:100%}
 
+    /* Konsole wrappt, hat eigenen vertikalen Scroll, verbreitert nichts */
+    pre#log{white-space:pre-wrap;word-wrap:break-word;overflow:auto;max-width:100%;
+      background:#0f1729;border:1px solid var(--line);border-radius:10px;padding:10px;max-height:26vh}
+
+    /* Feedbackfarben */
     #feedback.ok{color:var(--ok);font-weight:600}
     #feedback.warn{color:var(--warn);font-weight:600}
     #feedback.err{color:var(--err);font-weight:600}
     .status-erfasst{color:var(--warn);font-weight:600}
 
+    /* Treffer-Highlight */
     .flash-green{animation:flashGreen 600ms ease-in-out}
     @keyframes flashGreen{0%{background:rgba(34,197,94,.35)}100%{background:transparent}}
 
-    /* Konsole wrappt, zieht nie die Seite breiter */
-    pre#log{white-space:pre-wrap;word-wrap:break-word;overflow:auto;max-width:100%;
-      background:#0f1729;border:1px solid var(--line);border-radius:10px;padding:10px;max-height:26vh}
+    /* Tabelle Desktop normal – auf Mobile automatisch Karten (kein Horizontal-Scroll) */
+    table{width:100%;border-collapse:collapse;table-layout:fixed}
+    th,td{border-bottom:1px solid var(--line);padding:8px 6px;text-align:left;vertical-align:top;word-wrap:break-word;overflow-wrap:anywhere}
+    th{background:#0f1729}
+    td.c{text-align:center}
 
-    /* Handy: Controls untereinander, nur vertikales Scrollen */
-    @media (max-width: 640px){
-      .controls > * { flex: 1 1 100%; min-width: 0; }
-      header h1{font-size:15px}
-      body{font-size:13px}
-      input[type="file"],select,button{font-size:13px;padding:8px;width:100%}
+    /* Kartenansicht für schmale Ansichten – kein Horizontalscroll */
+    @media (max-width:700px){
+      table, thead, tbody, th, td, tr{display:block;width:100%}
+      thead{display:none}
+      tbody tr{border:1px solid var(--line);border-radius:10px;margin-bottom:8px;overflow:hidden}
+      td[data-l="key"], td[data-l="status"]{display:inline-block;width:50%;box-sizing:border-box;padding-bottom:6px}
+      td[data-l="key"]{font-weight:700}
+      td[data-l="status"]{text-align:right}
+      td[data-l="art"]{display:block;width:100%;padding-top:0}
+      .nums{display:flex;gap:6px;margin-top:6px}
+      .nums>div{flex:1;border:1px dashed var(--line);border-radius:8px;padding:6px;text-align:center}
+      .nums .label{display:block;color:var(--muted);font-size:12px;margin-bottom:2px}
     }
   </style>
 </head>
 <body>
   <header>
     <h1>VRM Wareneingang – Kamera-OCR</h1>
-    <span class="badge">Build v17 (Layout fix + Logik aus v11/v12)</span>
+    <span class="badge">Build v18 (kein Horizontal-Scroll, Logik wie v17)</span>
   </header>
 
   <main>
@@ -106,23 +116,21 @@
       <div class="hint" id="ocrStatus">OCR bereit …</div>
     </section>
 
-    <!-- 3) TABELLE (nur hier horizontaler Scroll erlaubt) -->
+    <!-- 3) LISTE / TABELLE (mobil = Karten) -->
     <section class="card">
-      <div class="table-scroll">
-        <table>
-          <thead>
-            <tr>
-              <th>Schlüssel</th>
-              <th>Artikel</th>
-              <th class="c">Erwartet</th>
-              <th class="c">Gesc.</th>
-              <th class="c">Offen</th>
-              <th class="c">Status</th>
-            </tr>
-          </thead>
-          <tbody id="tbody"></tbody>
-        </table>
-      </div>
+      <table>
+        <thead>
+          <tr>
+            <th>Schlüssel</th>
+            <th>Artikel</th>
+            <th class="c">Erwartet</th>
+            <th class="c">Gesc.</th>
+            <th class="c">Offen</th>
+            <th class="c">Status</th>
+          </tr>
+        </thead>
+        <tbody id="tbody"></tbody>
+      </table>
     </section>
 
     <!-- 4) LOG -->
@@ -133,15 +141,13 @@
   </main>
 
 <script>
-// Optionaler Service Worker
-if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.register('./service-worker.js?v=17').catch(()=>{});
-}
+// Service Worker optional
+if ('serviceWorker' in navigator) { navigator.serviceWorker.register('./service-worker.js?v=18').catch(()=>{}); }
 
-const $ = sel => document.querySelector(sel);
+const $ = s => document.querySelector(s);
 const log = (...a)=>{ const el=$('#log'); el.textContent += a.join(' ') + '\n'; console.log(...a); };
 
-/* ================== CSV (wie v11/v12) ================== */
+/* ===== CSV (wie v11/v12/v17) ===== */
 let headers=[], rows=[];
 let expect=new Map(), scanned=new Map(), firstArticle=new Map();
 let keyName='LS', qtyName='Bretter';
@@ -159,7 +165,6 @@ $('#btnLoad').addEventListener('click', async () => {
     rows = data.slice(1);
     $('#csvInfo').textContent = `Trennzeichen: "${delim}" • Spalten: ${headers.length} • Zeilen: ${rows.length}`;
 
-    // Dropdowns füllen
     const keySel = $('#keyCol'), qtySel = $('#qtyCol');
     keySel.innerHTML=''; qtySel.innerHTML='';
     headers.forEach(h => {
@@ -167,24 +172,17 @@ $('#btnLoad').addEventListener('click', async () => {
       const o2=document.createElement('option'); o2.value=h; o2.textContent=h; qtySel.appendChild(o2);
     });
 
-    // Defaults wie v11/v12
     keyName = headers.includes('Wagennummer') ? 'Wagennummer' : (headers.includes('LS') ? 'LS' : headers[0]);
-    keySel.value = keyName;
-    keySel.disabled=false;
+    keySel.value = keyName; keySel.disabled=false;
 
-    if (headers.includes('Bretter')) {
-      qtyName = 'Bretter'; qtySel.value='Bretter';
-    } else {
-      const opt = document.createElement('option'); opt.value='<keine>'; opt.textContent='<keine>'; qtySel.prepend(opt); qtySel.value='<keine>';
-      qtyName = '<keine>';
-    }
+    if (headers.includes('Bretter')) { qtyName='Bretter'; qtySel.value='Bretter'; }
+    else { const opt=document.createElement('option'); opt.value='<keine>'; opt.textContent='<keine>'; qtySel.prepend(opt); qtySel.value='<keine>'; qtyName='<keine>'; }
     qtySel.disabled=false;
 
     applyMapping(); status();
     log('CSV übernommen. Spalten:', headers.join(' | '));
   }catch(e){
-    alert('CSV-Fehler: '+(e.message||e));
-    log('CSV-Fehler:', e);
+    alert('CSV-Fehler: '+(e.message||e)); log('CSV-Fehler:', e);
   }
 });
 
@@ -200,47 +198,59 @@ function applyMapping(){
   for (const r of rows) {
     if (!r || !r.length) continue;
     if (kIdx<0 || kIdx>=r.length) continue;
-    const key = String(r[kIdx] ?? '').trim();
-    if (!key) continue;
-    let q = 1;
-    if (qIdx>=0 && qIdx<r.length) q = toInt(r[qIdx],1);
+    const key = String(r[kIdx] ?? '').trim(); if (!key) continue;
+    let q = 1; if (qIdx>=0 && qIdx<r.length) q = toInt(r[qIdx],1);
     expect.set(key, (expect.get(key)||0) + (q>0?q:1));
     if (!firstArticle.has(key) && aIdx>=0 && aIdx<r.length) firstArticle.set(key, String(r[aIdx] ?? ''));
   }
-  renderTable();
-  $('#lastScan').textContent='–'; setFeedback('', '');
+  renderTable(); $('#lastScan').textContent='–'; setFeedback('', '');
 }
 
+/* ===== Tabelle rendern: Desktop normal, Mobile = Karten (kein Horizontal-Scroll) ===== */
 function renderTable(){
-  const tb = document.getElementById('tbody');
-  tb.innerHTML = '';
+  const tb = $('#tbody'); tb.innerHTML='';
   const keys = Array.from(expect.keys()).sort((a,b)=>a.localeCompare(b));
+  const isMobile = window.matchMedia('(max-width:700px)').matches;
+
   for (const k of keys){
     const exp = expect.get(k) || 0;
     const done = scanned.get(k) || 0;
     const open = Math.max(exp - done, 0);
-
     let status = 'offen', cls = '';
-    if (done === 0)      { status = 'offen';      cls = ''; }
-    else if (done < exp) { status = 'erfasst';    cls = 'status-erfasst'; }
-    else if (done === exp){ status = 'ok';        cls = 'ok'; }
+    if (done === 0)      { status = 'offen'; }
+    else if (done < exp) { status = 'erfasst'; cls = 'status-erfasst'; }
+    else if (done === exp){ status = 'ok'; }
     else                 { status = 'überzählig'; cls = 'warn'; }
 
-    const tr = document.createElement('tr');
-    tr.dataset.key = k;
-    tr.innerHTML = `
-      <td>${escapeHtml(k)}</td>
-      <td>${escapeHtml(firstArticle.get(k) || '')}</td>
-      <td class="c">${exp}</td>
-      <td class="c">${done}</td>
-      <td class="c">${open}</td>
-      <td class="c ${cls}">${status}</td>
-    `;
-    tb.appendChild(tr);
+    if (isMobile){
+      const tr = document.createElement('tr'); tr.dataset.key=k;
+      const tdKey = document.createElement('td'); tdKey.dataset.l='key'; tdKey.textContent=k;
+      const tdStatus = document.createElement('td'); tdStatus.dataset.l='status'; tdStatus.className='c '+cls; tdStatus.textContent=status;
+      const tdArt = document.createElement('td'); tdArt.dataset.l='art'; tdArt.textContent=firstArticle.get(k)||'';
+      const tdNums = document.createElement('td'); const wrap=document.createElement('div'); wrap.className='nums';
+      wrap.innerHTML = `<div><span class="label">Erw.</span>${exp}</div><div><span class="label">Gesc.</span>${done}</div><div><span class="label">Offen</span>${open}</div>`;
+      tdNums.appendChild(wrap);
+      tr.append(tdKey, tdStatus, tdArt, tdNums);
+      tb.appendChild(tr);
+    } else {
+      const tr = document.createElement('tr'); tr.dataset.key=k;
+      tr.innerHTML = `
+        <td>${escapeHtml(k)}</td>
+        <td>${escapeHtml(firstArticle.get(k) || '')}</td>
+        <td class="c">${exp}</td>
+        <td class="c">${done}</td>
+        <td class="c">${open}</td>
+        <td class="c ${cls}">${status}</td>
+      `;
+      tb.appendChild(tr);
+    }
   }
 }
+// neu: bei Größen-/Orientationswechsel Ansicht umschalten
+window.addEventListener('resize', ()=>renderTable());
 
-document.getElementById('export').addEventListener('click', ()=>{
+/* ===== Export ===== */
+$('#export').addEventListener('click', ()=>{
   if (!expect.size) return alert('Kein Datensatz geladen.');
   const out=[["Schlüssel","Artikel (erste Zeile)","Erwartet","Gescant","Offen","Status"]];
   const keys=Array.from(expect.keys()).sort((a,b)=>a.localeCompare(b));
@@ -253,15 +263,15 @@ document.getElementById('export').addEventListener('click', ()=>{
   downloadCSV(`wareneingang_report_${ts}.csv`, out);
 });
 
-/* ================== Kamera & OCR (wie v11/v12) ================== */
+/* ===== Kamera & OCR (wie v11/v12/v17) ===== */
 let videoStream=null, workerReady=false;
 let ocrLang='eng+deu';
 
-document.getElementById('lang').addEventListener('change', e => { ocrLang=e.target.value; setFeedback(`OCR-Sprache: ${ocrLang}`, ''); });
+$('#lang').addEventListener('change', e => { ocrLang=e.target.value; setFeedback(`OCR-Sprache: ${ocrLang}`, ''); });
 
-document.getElementById('startCam').addEventListener('click', startCamera);
-document.getElementById('stopCam').addEventListener('click', stopCamera);
-document.getElementById('scanNow').addEventListener('click', () => {
+$('#startCam').addEventListener('click', startCamera);
+$('#stopCam').addEventListener('click', stopCamera);
+$('#scanNow').addEventListener('click', () => {
   const video = $('#video');
   if (video.srcObject) captureAndOCR(video);
   else setFeedback('Kamera ist nicht aktiv.', 'err');
@@ -270,21 +280,16 @@ document.getElementById('scanNow').addEventListener('click', () => {
 async function startCamera(){
   try{
     const video=$('#video');
-    // Einfaches Constraint-Set wie v11/v12
     videoStream = await navigator.mediaDevices.getUserMedia({ video:{ facingMode:'environment' } });
     video.srcObject = videoStream;
     setFeedback('Kamera aktiv. Bereit zum Scannen.', '');
     log('Kamera gestartet');
-
-    // OCR Worker wie v11/v12
     await ensureWorker();
     $('#ocrStatus').textContent='OCR bereit.';
   }catch(e){
-    setFeedback('Kamera-Fehler: '+e.message, 'err');
-    log('Kamera-Fehler:', e.name, e.message);
+    setFeedback('Kamera-Fehler: '+e.message, 'err'); log('Kamera-Fehler:', e.name, e.message);
   }
 }
-
 function stopCamera(){
   if (videoStream){ for (const t of videoStream.getTracks()) t.stop(); videoStream=null; }
   setFeedback('Kamera gestoppt.', '');
@@ -292,7 +297,7 @@ function stopCamera(){
 
 async function ensureWorker(){
   if (workerReady) return;
-  $('#ocrStatus').textContent='Lade OCR … (erster Start 10–20s)';
+  $('#ocrStatus').textContent='Lade OCR … (einmalig 10–20s)';
   if (!window.Tesseract){
     await new Promise((resolve,reject)=>{
       const s=document.createElement('script');
@@ -312,25 +317,23 @@ async function captureAndOCR(video){
   const canvas=document.createElement('canvas');
   const w=video.videoWidth, h=video.videoHeight;
   if (!w || !h) { setFeedback('Kamerabild noch nicht bereit.', 'warn'); return; }
-
   canvas.width=w; canvas.height=h;
   const ctx=canvas.getContext('2d');
   const cw=Math.floor(w*0.9), ch=Math.floor(h*0.6);
   const sx=Math.floor((w-cw)/2), sy=Math.floor((h-ch)/2);
   ctx.drawImage(video, sx, sy, cw, ch, 0, 0, cw, ch);
   $('#ocrStatus').textContent='Erkenne Text …';
-
   const { data:{ text } } = await _tessWorker.recognize(canvas);
   const clean=text.trim().replace(/\s+/g,' ');
   $('#ocrStatus').textContent='Gefundener Text: '+clean;
   checkOCRMatch(clean);
 }
 
-/* ================== Matching & Feedback ================== */
+/* ===== Matching & Feedback ===== */
 function checkOCRMatch(text){
   if (!expect.size) { setFeedback('Bitte zuerst CSV übernehmen.', 'err'); return; }
-  const tokens = (text||'').toUpperCase().replace(/[^A-Z0-9]+/g,' ').split(' ').filter(t=>t.length>=4 && t.length<=12);
-  const keyMap = new Map(); for (const key of expect.keys()) { if (!key) continue; keyMap.set(String(key).toUpperCase(), key); }
+  const tokens=(text||'').toUpperCase().replace(/[^A-Z0-9]+/g,' ').split(' ').filter(t=>t.length>=4 && t.length<=12);
+  const keyMap=new Map(); for (const key of expect.keys()) keyMap.set(String(key).toUpperCase(), key);
 
   for (const tok of tokens){
     if (keyMap.has(tok)){
@@ -338,40 +341,32 @@ function checkOCRMatch(text){
       const prev = scanned.get(key) || 0;
       const done = prev + 1;
       scanned.set(key, done);
-      document.getElementById('lastScan').textContent = key;
+      $('#lastScan').textContent = key;
 
       const exp = expect.get(key) || 0;
-      if (done < exp) { setFeedback(`✅ ${key}: erfasst ${done}/${exp}`, 'warn'); beep(880, 90); flashRow(key); }
-      else if (done === exp) { setFeedback(`✅ ${key}: vollständig (${done}/${exp})`, 'ok'); beep(1200, 120); flashRow(key); }
-      else { setFeedback(`⚠️ ${key}: ÜBERZÄHLIG (${done}/${exp})`, 'warn'); beep(600, 150); flashRow(key); }
+      if (done < exp) { setFeedback(`✅ ${key}: erfasst ${done}/${exp}`, 'warn'); beep(880,90); flashRow(key); }
+      else if (done === exp) { setFeedback(`✅ ${key}: vollständig (${done}/${exp})`, 'ok'); beep(1200,120); flashRow(key); }
+      else { setFeedback(`⚠️ ${key}: ÜBERZÄHLIG (${done}/${exp})`, 'warn'); beep(600,150); flashRow(key); }
 
-      renderTable(); status();
-      if (navigator.vibrate) { navigator.vibrate(80); }
+      renderTable(); status(); if (navigator.vibrate) navigator.vibrate(80);
       return;
     }
   }
-  setFeedback('❌ Kein Schlüssel im OCR-Text gefunden', 'err');
-  beep(300, 140);
+  setFeedback('❌ Kein Schlüssel im OCR-Text gefunden', 'err'); beep(300,140);
 }
-
 function flashRow(key){
   const row = [...document.querySelectorAll('#tbody tr')].find(tr => tr.dataset.key === key);
-  if (!row) return;
-  row.classList.remove('flash-green'); // reset
-  void row.offsetWidth;                // Reflow
-  row.classList.add('flash-green');
+  if (!row) return; row.classList.remove('flash-green'); void row.offsetWidth; row.classList.add('flash-green');
 }
 
-/* ================== Status & Beep ================== */
+/* ===== Status & Beep ===== */
 function status(){
   const totalExp=[...expect.values()].reduce((a,b)=>a+b,0);
   const totalDone=[...scanned.values()].reduce((a,b)=>a+b,0);
   const totalOpen=Math.max(totalExp-totalDone,0);
   $('#statusbar').textContent=`Gesamt: erwartet ${totalExp} • gescannt ${totalDone} • offen ${totalOpen}`;
 }
-function setFeedback(text, type){
-  const f=$('#feedback'); f.textContent=text; f.className=type||'';
-}
+function setFeedback(text, type){ const f=$('#feedback'); f.textContent=text; f.className=type||''; }
 
 let audioCtx;
 function beep(freq=440, dur=100){
@@ -391,7 +386,7 @@ function beep(freq=440, dur=100){
   }catch(e){}
 }
 
-/* ================== Utils (wie v11/v12) ================== */
+/* ===== Utils ===== */
 function detectDelimiter(text){
   const sample=text.split(/\r?\n/).slice(0,20).join('\n');
   const counts={',':0,';':0,'\t':0,'|':0}; let inQ=false;
